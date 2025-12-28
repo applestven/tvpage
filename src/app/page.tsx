@@ -6,7 +6,7 @@ import LanguageSelector from "../components/LanguageSelector";
 import StatusIndicator, { StatusType } from "../components/StatusIndicator";
 import TranscriptStream from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 
 export default function Home() {
   // 状态占位
@@ -14,6 +14,15 @@ export default function Home() {
   const [queue, setQueue] = useState<number>(2);
   const [percent, setPercent] = useState<number>(35);
   const [resultReady, setResultReady] = useState<boolean>(false);
+  
+  // 视频输入状态
+  const [hasVideoInput, setHasVideoInput] = useState<boolean>(false);
+
+  const handleInputChange = useCallback((hasInput: boolean, type: 'url' | 'file' | null, value: string | File | null) => {
+    setHasVideoInput(hasInput);
+    // 可以在这里保存 type 和 value 供后续使用
+    console.log('Input changed:', { hasInput, type, value });
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 font-sans">
@@ -31,7 +40,7 @@ export default function Home() {
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">1. 视频输入</h2>
               <p className="text-xs text-blue-700 mb-2">粘贴视频链接或上传本地视频（二选一）</p>
-              <VideoInput />
+              <VideoInput onInputChange={handleInputChange} />
             </div>
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">2. 语言选择</h2>
@@ -39,7 +48,7 @@ export default function Home() {
               <LanguageSelector />
             </div>
             <div>
-              <UploadButton disabled={false} />
+              <UploadButton disabled={false} active={hasVideoInput} />
             </div>
           </div>
         </section>
