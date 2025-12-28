@@ -34,7 +34,7 @@ const VideoInput: React.FC = () => {
         id="video-url"
         type="text"
         placeholder="输入视频 URL"
-        className="input input-bordered w-full"
+        className="input input-bordered w-full text-blue-500"
         value={url}
         ref={inputRef}
         onChange={e => setUrl(e.target.value)}
@@ -44,7 +44,7 @@ const VideoInput: React.FC = () => {
         <span className="mx-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-200">二选一</span>
         <div className="flex-1 h-px bg-blue-200" />
       </div>
-      <input id="video-upload" type="file" accept="video/*" className="file-input w-full" />
+      <input id="video-upload" type="file" accept="video/*" className="file-input w-full text-blue-500" />
     </div>
   );
 };
