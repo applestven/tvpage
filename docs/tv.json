@@ -1,0 +1,389 @@
+{
+    "openapi": "3.0.0",
+    "paths": {
+        "/": {
+            "get": {
+                "operationId": "AppController_getHello",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "App"
+                ]
+            }
+        },
+        "/tts/upload": {
+            "post": {
+                "operationId": "TaskController_uploadTask",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "format": "binary",
+                                        "description": "音频或视频文件"
+                                    },
+                                    "quality": {
+                                        "type": "string",
+                                        "example": "medium"
+                                    },
+                                    "languageArray": {
+                                        "type": "string",
+                                        "example": "zh"
+                                    }
+                                },
+                                "required": [
+                                    "file",
+                                    "quality"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "summary": "上传音视频文件并创建转写任务",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/task": {
+            "post": {
+                "operationId": "TaskController_createTask",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "description": "任务参数",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Task"
+                            },
+                            "examples": {
+                                "example1": {
+                                    "summary": "基本参数",
+                                    "value": {
+                                        "url": "http://192.168.191.168:3456/downloads/2025-12-27T03-05-12.168Z.mp3",
+                                        "quality": "medium",
+                                        "languageArray": "zh"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "summary": "创建转写任务",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/cancel": {
+            "delete": {
+                "operationId": "TaskController_cancelTask",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "query",
+                        "description": "任务ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "取消任务",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/queue/status": {
+            "get": {
+                "operationId": "TaskController_getQueueStatus",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "获取队列状态",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/sse": {
+            "get": {
+                "operationId": "TaskController_sseTaskStatus",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "query",
+                        "description": "任务ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "任务状态推送",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/tasks": {
+            "get": {
+                "operationId": "TaskController_getTasks",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "description": "页码（从1开始）",
+                        "schema": {
+                            "example": 1,
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "pageSize",
+                        "required": false,
+                        "in": "query",
+                        "description": "每页数量",
+                        "schema": {
+                            "example": 10,
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "required": false,
+                        "in": "query",
+                        "description": "任务状态过滤",
+                        "schema": {
+                            "enum": [
+                                "pending",
+                                "queued",
+                                "running",
+                                "success",
+                                "failed"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "quality",
+                        "required": false,
+                        "in": "query",
+                        "description": "模型质量过滤",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "location",
+                        "required": false,
+                        "in": "query",
+                        "description": "节点位置过滤",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "获取任务列表",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/models": {
+            "get": {
+                "operationId": "TaskController_getModels",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "获取模型列表",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/cleanup": {
+            "post": {
+                "operationId": "TaskController_manualCleanup",
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "summary": "手动清理超过半个月的任务和文件",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/srt-to-txt": {
+            "get": {
+                "operationId": "TaskController_srtToTxt",
+                "parameters": [
+                    {
+                        "name": "file",
+                        "required": true,
+                        "in": "query",
+                        "description": "SRT 文件名",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "SRT 转 TXT（纯文本）",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/{id}": {
+            "get": {
+                "operationId": "TaskController_getTask",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "description": "任务ID",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "获取任务详情",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/file-manager/delete": {
+            "delete": {
+                "operationId": "FileManagerController_deleteFile",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeleteFileDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "删除成功"
+                    },
+                    "400": {
+                        "description": "非法的文件名"
+                    },
+                    "404": {
+                        "description": "文件不存在"
+                    }
+                },
+                "summary": "删除 static 文件夹下的文件",
+                "tags": [
+                    "文件管理"
+                ]
+            }
+        },
+        "/file-manager/list": {
+            "get": {
+                "operationId": "FileManagerController_listFiles",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "文件列表"
+                    }
+                },
+                "summary": "列出 static 文件夹下的所有文件",
+                "tags": [
+                    "文件管理"
+                ]
+            }
+        }
+    },
+    "info": {
+        "title": "TV 语音识别服务",
+        "description": "基于 fast-whisper 的语音识别 API 文档",
+        "version": "1.0",
+        "contact": {}
+    },
+    "tags": [],
+    "servers": [],
+    "components": {
+        "schemas": {
+            "Task": {
+                "type": "object",
+                "properties": {}
+            },
+            "DeleteFileDto": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "要删除的文件名",
+                        "example": "example.mp3"
+                    }
+                },
+                "required": [
+                    "filename"
+                ]
+            }
+        }
+    }
+}
