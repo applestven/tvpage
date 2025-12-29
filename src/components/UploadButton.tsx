@@ -3,9 +3,10 @@ import React from 'react';
 interface UploadButtonProps {
   disabled?: boolean;
   active?: boolean;
+  onClick?: () => void;
 }
 
-const UploadButton: React.FC<UploadButtonProps> = ({ disabled, active }) => {
+const UploadButton: React.FC<UploadButtonProps> = ({ disabled, active, onClick }) => {
   return (
     <button 
       className={`w-full py-3 px-6 rounded-xl font-semibold text-base transition-all duration-300 flex items-center justify-center gap-2 ${
@@ -14,6 +15,7 @@ const UploadButton: React.FC<UploadButtonProps> = ({ disabled, active }) => {
           : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
       }`} 
       disabled={disabled || !active}
+      onClick={onClick}
     >
       {active ? (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
