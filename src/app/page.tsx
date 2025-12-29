@@ -9,7 +9,8 @@ import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
 const DV_BASE = 'http://192.168.191.168:3456';
-const TV_BASE = 'http://192.168.191.168:6789';
+// const TV_BASE = 'http://192.168.191.168:6789';
+const TV_BASE = 'http://127.0.0.1:6789';
 
 export default function Home() {
   // 状态占位
@@ -153,7 +154,7 @@ export default function Home() {
 
         // 创建转写任务
         setStatus('transcoding');
-        const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'medium', languageArray: 'auto' }) });
+        const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
         if (!tRes.ok) throw new Error('create tts task failed');
         let tjson: any = {};
         try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
@@ -177,7 +178,7 @@ export default function Home() {
         setStatus('transcoding');
         const fm = new FormData();
         fm.append('file', current.value);
-        fm.append('quality', 'medium');
+        fm.append('quality', 'small');
         fm.append('languageArray', 'auto');
         const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
         if (!upl.ok) throw new Error('upload failed');

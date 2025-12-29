@@ -33,7 +33,7 @@
                                     },
                                     "quality": {
                                         "type": "string",
-                                        "example": "medium"
+                                        "example": "small"
                                     },
                                     "languageArray": {
                                         "type": "string",
@@ -76,7 +76,7 @@
                                     "summary": "基本参数",
                                     "value": {
                                         "url": "http://192.168.191.168:3456/downloads/2025-12-27T03-05-12.168Z.mp3",
-                                        "quality": "medium",
+                                        "quality": "small",
                                         "languageArray": "zh"
                                     }
                                 }
