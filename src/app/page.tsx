@@ -8,8 +8,9 @@ import TranscriptStream, { TranscriptSegment } from "../components/TranscriptStr
 import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
-const DV_BASE = 'http://192.168.191.168:3456';
+// const DV_BASE = 'http://192.168.191.168:3456';
 // const TV_BASE = 'http://192.168.191.168:6789';
+const DV_BASE = 'http://127.0.0.1:3456';
 const TV_BASE = 'http://127.0.0.1:6789';
 
 export default function Home() {
@@ -191,6 +192,27 @@ export default function Home() {
 };
 
 
+  // 通用重试函数
+  const withRetry = async <T,>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    delayMs: number = 1000
+  ): Promise<T> => {
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`第 ${attempt}/${maxRetries} 次尝试失败:`, lastError.message);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+      }
+    }
+    throw lastError;
+  };
+
   const startTask = async () => {
     // 中断上一次 SSE（等价 Ctrl+C）
     stoppedRef.current = true;
@@ -209,34 +231,40 @@ export default function Home() {
       // 先调用下载服务
       try {
         setStatus('downloading');
-        const body = { url: current.value, quality: 'audio_worst' };
-        const res = await fetch(`${DV_BASE}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error('submit download failed');
-        const rjson = await res.json();
-        const dvTaskId = rjson.taskId || rjson.id || rjson.data?.id;
-        if (!dvTaskId) throw new Error('download task id missing');
+        
+        // 提交下载任务（带重试）
+        const dvTaskId = await withRetry(async () => {
+          const body = { url: current.value, quality: 'audio_worst' };
+          const res = await fetch(`${DV_BASE}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (!res.ok) throw new Error('submit download failed');
+          const rjson = await res.json();
+          const taskId = rjson.taskId || rjson.id || rjson.data?.id;
+          if (!taskId) throw new Error('download task id missing');
+          return taskId;
+        });
 
         const dvResult = await pollDvTask(dvTaskId);
         // dvResult.fullPath 指向可访问的音频文件
         const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
         if (!audioUrl) throw new Error('download result missing file url');
 
-        // 创建转写任务
+        // 创建转写任务（带重试）
         setStatus('transcoding');
-        const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
-        if (!tRes.ok) throw new Error('create tts task failed');
-        let tjson: any = {};
-        try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
-        const ttsId = tjson.id || tjson.taskId || tRes.headers.get('Location')?.split('/').pop();
-        if (!ttsId) {
-          // 如果没有 id，尝试查询最近任务或直接结束
-          console.warn('tts id not found, SSE may not work');
-        }
+        const ttsId = await withRetry(async () => {
+          const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
+          if (!tRes.ok) throw new Error('create tts task failed');
+          let tjson: any = {};
+          try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
+          const id = tjson.id || tjson.taskId || tRes.headers.get('Location')?.split('/').pop();
+          if (!id) throw new Error('tts id not found');
+          return id;
+        });
+
         // 订阅 SSE
         if (ttsId) connectSSE(ttsId);
 
       } catch (err) {
-        console.error(err);
+        console.error('任务失败（已重试3次）:', err);
         setStatus('error');
       }
     }
@@ -245,18 +273,25 @@ export default function Home() {
       // 上传文件到 TTS 上传接口
       try {
         setStatus('transcoding');
-        const fm = new FormData();
-        fm.append('file', current.value);
-        fm.append('quality', 'small');
-        fm.append('languageArray', 'auto');
-        const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
-        if (!upl.ok) throw new Error('upload failed');
-        let ujson: any = {};
-        try { ujson = await upl.json(); } catch (e) { /* ignore */ }
-        const ttsId = ujson.id || ujson.taskId || upl.headers.get('Location')?.split('/').pop();
+        
+        // 上传文件（带重试）
+        const ttsId = await withRetry(async () => {
+          const fm = new FormData();
+          fm.append('file', current.value as File);
+          fm.append('quality', 'small');
+          fm.append('languageArray', 'auto');
+          const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
+          if (!upl.ok) throw new Error('upload failed');
+          let ujson: any = {};
+          try { ujson = await upl.json(); } catch (e) { /* ignore */ }
+          const id = ujson.id || ujson.taskId || upl.headers.get('Location')?.split('/').pop();
+          if (!id) throw new Error('tts id not found');
+          return id;
+        });
+
         if (ttsId) connectSSE(ttsId);
       } catch (err) {
-        console.error(err);
+        console.error('任务失败（已重试3次）:', err);
         setStatus('error');
       }
     }
