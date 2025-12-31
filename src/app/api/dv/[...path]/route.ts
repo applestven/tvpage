@@ -2,40 +2,57 @@ import { NextResponse } from 'next/server';
 
 const INTERNAL_BASE = process.env.DV_INTERNAL || 'http://192.168.191.168:3456';
 
-async function proxy(req: Request, params: { path?: string[] }) {
+async function proxy(req: Request, params?: Promise<{ path?: string[] }> | { path?: string[] }) {
     try {
-        const path = (params.path || []).join('/') || '';
+        // params 在最新 Next.js 中可能是 Promise，需要先 await
+        const resolvedParams = await Promise.resolve(params || {} as { path?: string[] });
+        const path = (resolvedParams.path || []).join('/') || '';
         const url = new URL(INTERNAL_BASE.replace(/\/+$/, '') + '/' + path);
         // preserve query
         const incomingUrl = new URL(req.url);
+        // 防止代理循环：如果 upstream 与当前请求来源为同一 hostname，则返回错误
+        try {
+            if (url.hostname === incomingUrl.hostname) {
+                return new NextResponse('Proxy loop detected: upstream target equals current host', { status: 500 });
+            }
+        } catch (e) {
+            // ignore
+        }
         incomingUrl.searchParams.forEach((v, k) => url.searchParams.append(k, v));
 
-        const headers: Record<string, string> = {};
-        req.headers.forEach((v, k) => {
-            // don't forward host header
-            if (k.toLowerCase() === 'host') return;
-            headers[k] = v as string;
-        });
+        // 转发请求头，排除 Host 等不应转发的 hop-by-hop 头
+        const forwardHeaders = new Headers();
+        for (const [k, v] of req.headers) {
+            const lk = k.toLowerCase();
+            if (lk === 'host') continue;
+            forwardHeaders.set(k, v as string);
+        }
 
-        const init: RequestInit = {
+        const init: any = {
             method: req.method,
-            headers,
-            // @ts-ignore - body can be a ReadableStream
-            body: ['GET', 'HEAD'].includes(req.method) ? undefined : req.body,
+            headers: forwardHeaders,
             redirect: 'manual',
         };
 
+        if (!['GET', 'HEAD'].includes(req.method)) {
+            init.body = req.body;
+            try { init.duplex = 'half'; } catch (e) { /* ignore if not supported */ }
+        }
+
         const upstream = await fetch(url.toString(), init);
 
-        // build response headers
         const resHeaders = new Headers();
         upstream.headers.forEach((v, k) => {
-            // strip hop-by-hop headers
-            if (['connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'proxy-authenticate', 'proxy-authorization'].includes(k.toLowerCase())) return;
+            const lk = k.toLowerCase();
+            if (['connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'proxy-authenticate', 'proxy-authorization'].includes(lk)) return;
             resHeaders.set(k, v);
         });
 
-        // stream response body back to client
+        const ct = upstream.headers.get('content-type') || '';
+        if (ct.includes('text/event-stream')) {
+            resHeaders.set('cache-control', 'no-cache');
+        }
+
         return new NextResponse(upstream.body, { status: upstream.status, headers: resHeaders });
     } catch (err) {
         return new NextResponse(String(err), { status: 500 });
