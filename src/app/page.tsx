@@ -14,6 +14,8 @@ const DV_BASE = isProduction ? 'http://192.168.191.168:3456' : 'http://127.0.0.1
 const TV_BASE = isProduction ? 'http://192.168.191.168:6789' : 'http://127.0.0.1:6789';
 
 export default function Home() {
+  const stoppedRef = useRef(false);
+  const printedRef = useRef<Set<string>>(new Set());
   // 状态占位
   const [status, setStatus] = useState<StatusType>("queueing");
   const [queue, setQueue] = useState<number>(0);
@@ -32,6 +34,11 @@ export default function Home() {
   useEffect(() => {
     return () => {
       // cleanup SSE on unmount
+      if (sseRef.current) {
+        sseRef.current.close();
+      }
+
+      stoppedRef.current = true;
       if (sseRef.current) {
         sseRef.current.close();
       }
@@ -86,53 +93,136 @@ export default function Home() {
     }
   };
 
-  const connectSSE = (ttsId: string) => {
-    // 订阅 TTS SSE
+  // 查询 TTS 任务详情
+  const fetchTaskDetail = async (ttsId: string) => {
     try {
-      if (sseRef.current) {
-        sseRef.current.close();
-        sseRef.current = null;
-      }
-      const es = new EventSource(`${TV_BASE}/tts/sse?id=${encodeURIComponent(ttsId)}`);
-      sseRef.current = es;
-      setStatus('transcribing');
-
-      es.onmessage = (e) => {
-        const text = e.data || '';
-        // 简单解析含 [xxx.s -> yyy.s] 的行作为片段
-        const lines = (text.split('\n') as string[]).map((l: string) => l.trim()).filter(Boolean);
-        const newSegments: TranscriptSegment[] = [];
-        lines.forEach((line: string) => {
-          const m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
-          if (m) {
-            const startS = parseFloat(m[1]);
-            const endS = parseFloat(m[2]);
-            const content = m[3].trim();
-            newSegments.push({ start: fmt(startS), end: fmt(endS), text: content });
-          } else if (line.toLowerCase().includes('status') && line.toLowerCase().includes('success')) {
-            // 标记完成
-            setStatus('completed');
-          } else {
-            // 当作普通转写文本追加
-            newSegments.push({ start: '00:00', end: '00:00', text: line });
-          }
-        });
-        if (newSegments.length) {
-          setSegments(prev => [...prev, ...newSegments]);
+      const detailRes = await fetch(`${TV_BASE}/tts/${ttsId}`);
+      if (detailRes.ok) {
+        const detailData = await detailRes.json();
+        if (detailData.output_name) {
+          setOutputName(detailData.output_name);
+          setResultReady(true);
         }
-      };
-
-      es.onerror = (err) => {
-        console.error('SSE error', err);
-        // 不立即关闭，等待服务端发结束
-      };
+      }
     } catch (err) {
-      console.error('connect sse failed', err);
-      setStatus('error');
+      console.error('获取任务详情失败:', err);
     }
   };
 
+  const connectSSE = (ttsId: string) => {
+  // 先终止旧连接
+  stoppedRef.current = false;
+
+  if (sseRef.current) {
+    sseRef.current.close();
+    sseRef.current = null;
+  }
+
+  const es = new EventSource(`${TV_BASE}/tts/sse?id=${encodeURIComponent(ttsId)}`);
+  sseRef.current = es;
+
+  setStatus('transcribing');
+
+  es.onmessage = (e) => {
+    if (stoppedRef.current) return;
+
+    let data: any;
+    try {
+      data = JSON.parse(e.data);
+    } catch {
+      return;
+    }
+
+    /** ===============================
+     * 1️⃣ Whisper CLI 纯输出（logs）
+     * =============================== */
+    if (Array.isArray(data.logs)) {
+      const newSegs: TranscriptSegment[] = [];
+
+      for (const line of data.logs) {
+        if (printedRef.current.has(line)) continue;
+        printedRef.current.add(line);
+
+        const m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
+        if (!m) continue;
+
+        newSegs.push({
+          start: fmt(parseFloat(m[1])),
+          end: fmt(parseFloat(m[2])),
+          text: m[3].trim(),
+        });
+      }
+
+      if (newSegs.length) {
+        setSegments(prev => [...prev, ...newSegs]);
+      }
+    }
+
+    /** ===============================
+     * 2️⃣ 停止 / 结束规则（与 CLI 一致）
+     * =============================== */
+    if (data.status === 'success') {
+      stoppedRef.current = true;
+      setStatus('completed');
+
+      es.close();
+      sseRef.current = null;
+
+      // SSE 停止后查询任务详情获取 output_name
+      fetchTaskDetail(ttsId);
+      return;
+    }
+
+    if (data.status === 'failed') {
+      stoppedRef.current = true;
+      console.error('transcribe failed:', data.error);
+      setStatus('error');
+
+      es.close();
+      sseRef.current = null;
+      return;
+    }
+  };
+
+  es.onerror = (err) => {
+    if (stoppedRef.current) return;
+    console.error('SSE error', err);
+    // 和 CLI 一样：不立即 close，等 success / failed
+  };
+};
+
+
+  // 通用重试函数
+  const withRetry = async <T,>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    delayMs: number = 1000
+  ): Promise<T> => {
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`第 ${attempt}/${maxRetries} 次尝试失败:`, lastError.message);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+      }
+    }
+    throw lastError;
+  };
+
   const startTask = async () => {
+    // 中断上一次 SSE（等价 Ctrl+C）
+    stoppedRef.current = true;
+    printedRef.current.clear();
+
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+
     const current = inputRef.current;
     if (!current.type) return;
     setStatus('queueing');
@@ -141,34 +231,40 @@ export default function Home() {
       // 先调用下载服务
       try {
         setStatus('downloading');
-        const body = { url: current.value, quality: 'audio_worst' };
-        const res = await fetch(`${DV_BASE}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error('submit download failed');
-        const rjson = await res.json();
-        const dvTaskId = rjson.taskId || rjson.id || rjson.data?.id;
-        if (!dvTaskId) throw new Error('download task id missing');
+        
+        // 提交下载任务（带重试）
+        const dvTaskId = await withRetry(async () => {
+          const body = { url: current.value, quality: 'audio_worst' };
+          const res = await fetch(`${DV_BASE}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          if (!res.ok) throw new Error('submit download failed');
+          const rjson = await res.json();
+          const taskId = rjson.taskId || rjson.id || rjson.data?.id;
+          if (!taskId) throw new Error('download task id missing');
+          return taskId;
+        });
 
         const dvResult = await pollDvTask(dvTaskId);
         // dvResult.fullPath 指向可访问的音频文件
         const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
         if (!audioUrl) throw new Error('download result missing file url');
 
-        // 创建转写任务
+        // 创建转写任务（带重试）
         setStatus('transcoding');
-        const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'medium', languageArray: 'auto' }) });
-        if (!tRes.ok) throw new Error('create tts task failed');
-        let tjson: any = {};
-        try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
-        const ttsId = tjson.id || tjson.taskId || tRes.headers.get('Location')?.split('/').pop();
-        if (!ttsId) {
-          // 如果没有 id，尝试查询最近任务或直接结束
-          console.warn('tts id not found, SSE may not work');
-        }
+        const ttsId = await withRetry(async () => {
+          const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
+          if (!tRes.ok) throw new Error('create tts task failed');
+          let tjson: any = {};
+          try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
+          const id = tjson.id || tjson.taskId || tRes.headers.get('Location')?.split('/').pop();
+          if (!id) throw new Error('tts id not found');
+          return id;
+        });
+
         // 订阅 SSE
         if (ttsId) connectSSE(ttsId);
 
       } catch (err) {
-        console.error(err);
+        console.error('任务失败（已重试3次）:', err);
         setStatus('error');
       }
     }
@@ -177,18 +273,25 @@ export default function Home() {
       // 上传文件到 TTS 上传接口
       try {
         setStatus('transcoding');
-        const fm = new FormData();
-        fm.append('file', current.value);
-        fm.append('quality', 'medium');
-        fm.append('languageArray', 'auto');
-        const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
-        if (!upl.ok) throw new Error('upload failed');
-        let ujson: any = {};
-        try { ujson = await upl.json(); } catch (e) { /* ignore */ }
-        const ttsId = ujson.id || ujson.taskId || upl.headers.get('Location')?.split('/').pop();
+        
+        // 上传文件（带重试）
+        const ttsId = await withRetry(async () => {
+          const fm = new FormData();
+          fm.append('file', current.value as File);
+          fm.append('quality', 'small');
+          fm.append('languageArray', 'auto');
+          const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
+          if (!upl.ok) throw new Error('upload failed');
+          let ujson: any = {};
+          try { ujson = await upl.json(); } catch (e) { /* ignore */ }
+          const id = ujson.id || ujson.taskId || upl.headers.get('Location')?.split('/').pop();
+          if (!id) throw new Error('tts id not found');
+          return id;
+        });
+
         if (ttsId) connectSSE(ttsId);
       } catch (err) {
-        console.error(err);
+        console.error('任务失败（已重试3次）:', err);
         setStatus('error');
       }
     }
@@ -196,8 +299,9 @@ export default function Home() {
 
   const handleDownloadSubtitle = () => {
     if (!outputName) return;
-    // 拼接下载地址（按 docs）
+    // 拼接下载地址（按 docs） 注意本地开发需要加端口
     const url = `https://tv.itclass.top/static/${outputName}`;
+    // const url = `http://127.0.0.1:6789/static/${outputName}`;
     window.open(url, '_blank');
   };
 
@@ -207,7 +311,23 @@ export default function Home() {
       const res = await fetch(`${TV_BASE}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`);
       if (!res.ok) throw new Error('srt to txt failed');
       const txt = await res.text();
-      await navigator.clipboard.writeText(txt);
+      
+      // 优先使用现代 API，兼容移动端
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(txt);
+      } else {
+        // 降级方案：创建临时 textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = txt;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       // 简短提示
       alert('已复制到剪切板');
     } catch (err) {
