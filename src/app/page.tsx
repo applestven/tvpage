@@ -8,8 +8,10 @@ import TranscriptStream, { TranscriptSegment } from "../components/TranscriptStr
 import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
-const DV_BASE = 'http://192.168.191.168:3456';
-const TV_BASE = 'http://192.168.191.168:6789';
+// 根据环境变量设置API地址
+const isProduction = process.env.NEXT_PUBLIC_ENV === 'production';
+const DV_BASE = isProduction ? 'http://192.168.191.168:3456' : 'http://127.0.0.1:3456';
+const TV_BASE = isProduction ? 'http://192.168.191.168:6789' : 'http://127.0.0.1:6789';
 
 export default function Home() {
   // 状态占位
