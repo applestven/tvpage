@@ -11,6 +11,7 @@
 				"$tsc"
 			],
 			"group": "build"
+			// 该任务会启动 Next.js 开发服务器，Next.js 的 API 路由用于代理内网服务（/api/dv 和 /api/tv）
 		}
 	]
 }

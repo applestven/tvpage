@@ -8,10 +8,11 @@ import TranscriptStream, { TranscriptSegment } from "../components/TranscriptStr
 import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
-// 根据环境变量设置API地址
-const isProduction = process.env.NEXT_PUBLIC_ENV === 'production';
-const DV_BASE = isProduction ? 'http://192.168.191.168:3456' : 'http://127.0.0.1:3456';
-const TV_BASE = isProduction ? 'http://192.168.191.168:6789' : 'http://127.0.0.1:6789';
+// 根据部署架构：浏览器 -> Next.js（公网） -> tv/dv（ZeroTier 内网）
+// 前端应通过 Next.js 的 API 路径访问内网服务，由 Next.js 在服务器端代理到真实内网地址。
+// 这样浏览器只访问同域的 /api 路径，避免直接暴露内网地址。
+const DV_API = '/api/dv';
+const TV_API = '/api/tv';
 
 export default function Home() {
   const stoppedRef = useRef(false);
@@ -68,7 +69,7 @@ export default function Home() {
   const pollDvTask = async (taskId: string) => {
     while (true) {
       try {
-        const res = await fetch(`${DV_BASE}/task/${taskId}`);
+        const res = await fetch(`${DV_API}/task/${taskId}`);
         if (!res.ok) throw new Error('dv task fetch failed');
         const data = await res.json();
         // data.status: pending, running, success, failed
@@ -96,7 +97,7 @@ export default function Home() {
   // 查询 TTS 任务详情
   const fetchTaskDetail = async (ttsId: string) => {
     try {
-      const detailRes = await fetch(`${TV_BASE}/tts/${ttsId}`);
+      const detailRes = await fetch(`${TV_API}/tts/${ttsId}`);
       if (detailRes.ok) {
         const detailData = await detailRes.json();
         if (detailData.output_name) {
@@ -118,7 +119,8 @@ export default function Home() {
     sseRef.current = null;
   }
 
-  const es = new EventSource(`${TV_BASE}/tts/sse?id=${encodeURIComponent(ttsId)}`);
+  // SSE 也通过 Next.js 路径代理到内网服务
+  const es = new EventSource(`${TV_API}/tts/sse?id=${encodeURIComponent(ttsId)}`);
   sseRef.current = es;
 
   setStatus('transcribing');
@@ -235,7 +237,7 @@ export default function Home() {
         // 提交下载任务（带重试）
         const dvTaskId = await withRetry(async () => {
           const body = { url: current.value, quality: 'audio_worst' };
-          const res = await fetch(`${DV_BASE}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const res = await fetch(`${DV_API}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           if (!res.ok) throw new Error('submit download failed');
           const rjson = await res.json();
           const taskId = rjson.taskId || rjson.id || rjson.data?.id;
@@ -245,13 +247,14 @@ export default function Home() {
 
         const dvResult = await pollDvTask(dvTaskId);
         // dvResult.fullPath 指向可访问的音频文件
+        // 注意：dvResult 返回的路径应为 Next.js 能代理访问的地址或者外部可访问地址。
         const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
         if (!audioUrl) throw new Error('download result missing file url');
 
         // 创建转写任务（带重试）
         setStatus('transcoding');
         const ttsId = await withRetry(async () => {
-          const tRes = await fetch(`${TV_BASE}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
+          const tRes = await fetch(`${TV_API}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
           if (!tRes.ok) throw new Error('create tts task failed');
           let tjson: any = {};
           try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
@@ -280,7 +283,7 @@ export default function Home() {
           fm.append('file', current.value as File);
           fm.append('quality', 'small');
           fm.append('languageArray', 'auto');
-          const upl = await fetch(`${TV_BASE}/tts/upload`, { method: 'POST', body: fm });
+          const upl = await fetch(`${TV_API}/tts/upload`, { method: 'POST', body: fm });
           if (!upl.ok) throw new Error('upload failed');
           let ujson: any = {};
           try { ujson = await upl.json(); } catch (e) { /* ignore */ }
@@ -300,15 +303,15 @@ export default function Home() {
   const handleDownloadSubtitle = () => {
     if (!outputName) return;
     // 拼接下载地址（按 docs） 注意本地开发需要加端口
-    const url = `https://tv.itclass.top/static/${outputName}`;
-    // const url = `http://127.0.0.1:6789/static/${outputName}`;
+    // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
+    const url = `${TV_API}/static/${outputName}`;
     window.open(url, '_blank');
   };
 
   const handleCopyText = async () => {
     if (!outputName) return;
     try {
-      const res = await fetch(`${TV_BASE}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`);
+      const res = await fetch(`${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`);
       if (!res.ok) throw new Error('srt to txt failed');
       const txt = await res.text();
       
