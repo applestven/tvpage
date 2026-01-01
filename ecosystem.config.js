@@ -4,7 +4,7 @@ module.exports = {
       name: 'tvpage-nextjs',              // PM2 应用名
       script: 'node_modules/next/dist/bin/next',
       args: 'start -p 6060',
-      cwd: '/root/code/tvpage/.next',           // ⚠️ 改成你真实的项目路径
+      cwd: '/root/code/tvpage/',           // ⚠️ 改成你真实的项目路径
       instances: 1,                        // Next.js 一般单实例
       exec_mode: 'fork',
 
