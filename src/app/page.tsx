@@ -29,8 +29,11 @@ export default function Home() {
 
   // 转写流与结果
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const segmentsRef = useRef<TranscriptSegment[]>([]);
   const [outputName, setOutputName] = useState<string | null>(null);
   const sseRef = useRef<EventSource | null>(null);
+  // store duration (ms) reported by SSE messages
+  const durationRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
@@ -51,7 +54,9 @@ export default function Home() {
     inputRef.current = { type, value };
     // 重置之前的任务状态
     setResultReady(false);
-    setSegments([]);
+  setSegments([]);
+  segmentsRef.current = [];
+  setPercent(0);
     setOutputName(null);
   }, []);
 
@@ -63,6 +68,37 @@ export default function Home() {
     const ss = s % 60;
     if (hh > 0) return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
     return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  };
+
+  // parse time strings like "03:54" or numeric seconds like "12.34" (optionally with trailing 's')
+  const timeStrToMs = (t: string) => {
+    if (!t) return 0;
+    t = String(t).trim();
+    // mm:ss or hh:mm:ss
+    if (t.includes(':')) {
+      const parts = t.split(':').map(p => Number(p));
+      if (parts.length === 2) {
+        return (parts[0] * 60 + parts[1]) * 1000;
+      }
+      if (parts.length === 3) {
+        return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+      }
+    }
+    // numeric seconds (maybe with trailing 's')
+    const m = t.match(/([\d.]+)s?$/);
+    if (m) {
+      const v = Number(m[1]);
+      // heuristics: if value looks like milliseconds (>10k), treat as ms
+      if (v > 10000) return Math.round(v);
+      return Math.round(v * 1000);
+    }
+    // fallback
+    const n = Number(t);
+    if (!Number.isNaN(n)) {
+      if (n > 10000) return Math.round(n);
+      return Math.round(n * 1000);
+    }
+    return 0;
   };
 
   // 轮询 DV 下载任务详情
@@ -125,6 +161,10 @@ export default function Home() {
 
   setStatus('transcribing');
 
+  // reset duration for this run
+  durationRef.current = null;
+  setPercent(0);
+
   es.onmessage = (e) => {
     if (stoppedRef.current) return;
 
@@ -136,7 +176,10 @@ export default function Home() {
     }
 
     /** ===============================
-     * 1️⃣ Whisper CLI 纯输出（logs）
+     * 1️⃣ Whisper CLI / 转写服务 输出（logs）
+     * 支持多种时间戳格式：
+     * - Whisper 样式: [12.34s -> 13.56s] text
+     * - ttx 样式:    [03:54 → 03:56] text
      * =============================== */
     if (Array.isArray(data.logs)) {
       const newSegs: TranscriptSegment[] = [];
@@ -145,27 +188,71 @@ export default function Home() {
         if (printedRef.current.has(line)) continue;
         printedRef.current.add(line);
 
-        const m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
-        if (!m) continue;
+        // 1) Whisper style seconds '[12.34s -> 13.56s] some text'
+        let m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
+        if (m) {
+          const startMs = Math.round(parseFloat(m[1]) * 1000);
+          const endMs = Math.round(parseFloat(m[2]) * 1000);
+          newSegs.push({ start: fmt(startMs / 1000), end: fmt(endMs / 1000), text: m[3].trim() });
+          // update percent if duration known
+          if (durationRef.current) {
+            const p = Math.min(100, Math.round((startMs / durationRef.current) * 100));
+            setPercent(p);
+          }
+          continue;
+        }
 
-        newSegs.push({
-          start: fmt(parseFloat(m[1])),
-          end: fmt(parseFloat(m[2])),
-          text: m[3].trim(),
-        });
+        // 2) Bracket time style '[03:54 → 03:56] optional text'
+        m = line.match(/\[\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:→|->|-)\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*\]\s*(.*)/);
+        if (m) {
+          const startMs = timeStrToMs(m[1]);
+          const endMs = timeStrToMs(m[2]);
+          newSegs.push({ start: fmt(startMs / 1000), end: fmt(endMs / 1000), text: m[3].trim() });
+          if (durationRef.current) {
+            const p = Math.min(100, Math.round((startMs / durationRef.current) * 100));
+            setPercent(p);
+          }
+          continue;
+        }
+
+        // 3) fallback: no timestamp match — skip
       }
 
       if (newSegs.length) {
-        setSegments(prev => [...prev, ...newSegs]);
+        setSegments(prev => {
+          const next = [...prev, ...newSegs];
+          segmentsRef.current = next;
+          return next;
+        });
       }
     }
 
     /** ===============================
-     * 2️⃣ 停止 / 结束规则（与 CLI 一致）
+     * 2️⃣ 其它 SSE 消息字段（duration / status / error）
      * =============================== */
+    // 支持 upstream 在任意消息中下发总时长字段 duration
+    if (data.duration !== undefined && data.duration !== null) {
+      const raw = Number(data.duration);
+      if (!Number.isNaN(raw)) {
+        // 如果看起来像秒则转换为毫秒（阈值：<= 10000 视为秒）
+        durationRef.current = raw > 10000 ? Math.round(raw) : Math.round(raw * 1000);
+        // 尝试用已存在的 segments 更新进度（使用最后一段的 start）
+        if (durationRef.current && segmentsRef.current.length > 0) {
+          const last = segmentsRef.current[segmentsRef.current.length - 1];
+          const lastStartMs = timeStrToMs(last.start);
+          if (lastStartMs > 0) {
+            const p = Math.min(100, Math.round((lastStartMs / durationRef.current) * 100));
+            setPercent(p);
+          }
+        }
+      }
+    }
+
+    // 停止 / 结束规则（与 CLI 一致）
     if (data.status === 'success') {
       stoppedRef.current = true;
       setStatus('completed');
+  setPercent(100);
 
       es.close();
       sseRef.current = null;
