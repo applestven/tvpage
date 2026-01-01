@@ -7,7 +7,7 @@
     "dev:prod": "cross-env NEXT_PUBLIC_ENV=production next dev -p 6060",
     "build": "next build",
     "start": "next start",
-    "start:prod": "cross-env NODE_ENV=production next start -p 6060",
+    "start:prod": "next start -p 6060",
     "deploy": "pm2 start ecosystem.config.js --env production",
     "lint": "eslint",
     "stop": "pm2 stop tvpage-nextjs",
