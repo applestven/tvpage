@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const INTERNAL_BASE = process.env.TV_INTERNAL || 'http://192.168.191.168:6789';
 
-async function proxy(req: Request, params?: Promise<{ path?: string[] }> | { path?: string[] }) {
+async function proxy(req: Request | NextRequest, params?: Promise<{ path?: string[] }> | { path?: string[] }) {
     try {
         // params 在最新 Next.js 中可能是 Promise，需要先 await
         const resolvedParams = await Promise.resolve(params || {} as { path?: string[] });
@@ -65,21 +65,21 @@ async function proxy(req: Request, params?: Promise<{ path?: string[] }> | { pat
     }
 }
 
-export async function GET(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function GET(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
-export async function POST(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function POST(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
-export async function PUT(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function PUT(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
-export async function DELETE(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function DELETE(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
-export async function PATCH(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function PATCH(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
-export async function OPTIONS(req: Request, { params }: { params?: { path?: string[] } } = {}) {
-    return proxy(req, params || {});
+export async function OPTIONS(req: NextRequest, context: { params: Promise<{ path: string[] }> }) {
+    return proxy(req, context.params);
 }
