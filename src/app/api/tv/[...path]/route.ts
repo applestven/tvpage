@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const INTERNAL_BASE = process.env.TV_INTERNAL || 'http://192.168.191.168:6789';
+const INTERNAL_BASE = process.env.TV_INTERNAL || 'http://api.itclass.top/tv';
 
 async function proxy(req: Request | NextRequest, params?: Promise<{ path?: string[] }> | { path?: string[] }) {
     try {
