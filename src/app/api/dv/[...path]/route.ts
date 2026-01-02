@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const INTERNAL_BASE = process.env.DV_INTERNAL || 'http://43.139.236.50:8866/dv';
+const INTERNAL_BASE = process.env.DV_INTERNAL || 'http://43.139.236.50:9994/dv';
 
 async function proxy(req: Request | NextRequest, params?: Promise<{ path?: string[] }> | { path?: string[] }) {
     try {
