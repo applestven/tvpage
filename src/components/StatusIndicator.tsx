@@ -1,10 +1,11 @@
 import React from 'react';
 
-export type StatusType = 'queueing' | 'downloading' | 'transcoding' | 'transcribing' | 'completed' | 'error';
+export type StatusType = 'queueing' | 'downloading' | 'uploading' | 'transcoding' | 'transcribing' | 'completed' | 'error';
 
 const statusMap: Record<StatusType, { color: string; text: string }> = {
   queueing: { color: 'bg-blue-200 text-blue-800', text: '正在排队中' },
   downloading: { color: 'bg-blue-100 text-blue-700', text: '正在下载视频' },
+  uploading: { color: 'bg-blue-100 text-blue-700', text: '正在上传音频' },
   transcoding: { color: 'bg-blue-100 text-blue-700', text: '正在转码音频' },
   transcribing: { color: 'bg-blue-100 text-blue-700', text: '正在转译' },
   completed: { color: 'bg-green-100 text-green-700', text: '已完成' },

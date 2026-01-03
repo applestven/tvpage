@@ -1,0 +1,29 @@
+name: Deploy on push to latest
+
+on:
+  push:
+    branches:
+      - latest
+
+jobs:
+  deploy:
+    name: Deploy to remote server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute remote deploy commands via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            # 配置 git 用户信息（可选：由 secrets 提供）
+            git config --global user.name "${{ secrets.GIT_USER_NAME }}"
+            git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
+
+            cd /root/code/tvpage
+            git reset --hard
+            git pull
+            npm run rebuild:start

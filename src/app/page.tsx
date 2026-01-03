@@ -362,7 +362,8 @@ export default function Home() {
     if (current.type === 'file' && current.value instanceof File) {
       // 上传文件到 TTS 上传接口
       try {
-        setStatus('transcoding');
+        // 正在上传音频文件
+        setStatus('uploading');
         
         // 上传文件（带重试）
         const ttsId = await withRetry(async () => {
@@ -437,7 +438,7 @@ export default function Home() {
 
       <main className="flex-1 flex flex-col md:flex-row w-full max-w-5xl mx-auto gap-8 py-8 px-4">
         {/* 左侧输入区（卡片分块+主色背景） */}
-        <section className="md:w-1/2 w-full flex flex-col gap-6">
+        <section className="md:w-2/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow-lg bg-white border border-blue-400 p-6 flex flex-col gap-6">
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">1. 视频输入</h2>
@@ -456,7 +457,7 @@ export default function Home() {
         </section>
 
         {/* 右侧输出区（卡片分块） */}
-        <section className="md:w-1/2 w-full flex flex-col gap-6">
+        <section className="md:w-3/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow bg-white border border-blue-200 p-6 flex flex-col gap-6">
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">5. 任务状态</h2>
