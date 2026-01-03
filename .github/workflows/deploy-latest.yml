@@ -10,16 +10,6 @@ jobs:
     name: Deploy to remote server
     runs-on: ubuntu-latest
     steps:
-      - name: Debug - Check secrets
-        run: |
-          echo "SSH_HOST length: ${#SSH_HOST}"
-          echo "SSH_USER length: ${#SSH_USER}"
-          echo "SSH_PASSWORD length: ${#SSH_PASSWORD}"
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-      
       - name: Execute remote deploy commands via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -27,25 +17,43 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
-          timeout: 30s  # 添加超时设置
           script: |
-            echo "当前目录: $(pwd)"
-            echo "用户: $(whoami)"
+            set -e
+            cd /root/code/tvpage
             
-            # 检查目录是否存在
-            if [ ! -d "/root/code/tvpage" ]; then
-              echo "错误: /root/code/tvpage 目录不存在"
-              ls -la /root/code/ || echo "/root/code 也不存在"
-              exit 1
+            # 1. 检查并安装 Node.js（如果需要）
+            if ! command -v node &> /dev/null; then
+              echo "安装 Node.js..."
+              
+              # 方法1: 使用 nvm（推荐）
+              echo "安装 nvm..."
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+              export NVM_DIR="$HOME/.nvm"
+              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+              
+              # 安装 Node.js LTS 版本
+              nvm install --lts
+              nvm use --lts
+              
+              # 方法2: 使用系统包管理器（如果支持）
+              # echo "使用 apt 安装 Node.js..."
+              # curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              # sudo apt-get install -y nodejs
             fi
             
-            cd /root/code/tvpage
-            echo "进入目录: $(pwd)"
+            # 2. 确认安装成功
+            echo "Node.js 版本: $(node -v)"
+            echo "npm 版本: $(npm -v)"
             
-            # 检查 git 仓库状态
-            git status || echo "git 命令失败"
-            
-            # 执行部署命令
+            # 3. 执行部署
             git reset --hard
             git pull origin latest
+            
+            # 4. 安装依赖（如果有 package.json）
+            if [ -f "package.json" ]; then
+              echo "安装依赖..."
+              npm ci --only=production || npm install --only=production
+            fi
+            
+            # 5. 执行构建和启动
             npm run rebuild:start
