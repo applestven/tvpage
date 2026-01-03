@@ -459,16 +459,16 @@ export default function Home() {
         {/* 右侧输出区（卡片分块） */}
         <section className="md:w-3/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow bg-white border border-blue-200 p-6 flex flex-col gap-6">
-            <div>
+            {/* <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">5. 任务状态</h2>
               <StatusIndicator status={status} queue={queue} percent={percent} />
-            </div>
+            </div> */}
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">6. 转写结果</h2>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">3. 转写结果</h2>
               <TranscriptStream segments={segments} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">7. 结果操作</h2>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">4. 结果操作</h2>
               <ResultActions disabled={!resultReady} onDownload={handleDownloadSubtitle} onCopy={handleCopyText} />
             </div>
           </div>
