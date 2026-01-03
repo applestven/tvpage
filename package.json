@@ -12,6 +12,7 @@
     "lint": "eslint",
     "stop": "pm2 stop tvpage-nextjs",
     "restart": "pm2 restart tvpage-nextjs",
+    "delete": "pm2 delete tvpage-nextjs",
     "rebuild:start": "pm2 stop tvpage-nextjs && npm run build && pm2 start ecosystem.config.js --env production"
   },
   "dependencies": {
