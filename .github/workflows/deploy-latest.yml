@@ -19,41 +19,73 @@ jobs:
           port: 22
           script: |
             set -e
-            cd /root/code/tvpage
             
-            # 1. 检查并安装 Node.js（如果需要）
-            if ! command -v node &> /dev/null; then
-              echo "安装 Node.js..."
-              
-              # 方法1: 使用 nvm（推荐）
-              echo "安装 nvm..."
-              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-              export NVM_DIR="$HOME/.nvm"
-              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-              
-              # 安装 Node.js LTS 版本
-              nvm install --lts
-              nvm use --lts
-              
-              # 方法2: 使用系统包管理器（如果支持）
-              # echo "使用 apt 安装 Node.js..."
-              # curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              # sudo apt-get install -y nodejs
+            # 1. 加载环境变量 - 关键步骤！
+            # 对于非交互式 SSH 会话，需要显式加载
+            export NVM_DIR="$HOME/.nvm"
+            
+            # 方法1: 直接加载 nvm
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              echo "加载 nvm..."
+              source "$NVM_DIR/nvm.sh"
             fi
             
-            # 2. 确认安装成功
-            echo "Node.js 版本: $(node -v)"
-            echo "npm 版本: $(npm -v)"
+            # 方法2: 加载 bashrc 和 profile
+            if [ -f "$HOME/.bashrc" ]; then
+              echo "加载 .bashrc..."
+              source "$HOME/.bashrc"
+            fi
             
-            # 3. 执行部署
+            if [ -f "$HOME/.profile" ]; then
+              echo "加载 .profile..."
+              source "$HOME/.profile"
+            fi
+            
+            # 检查环境
+            echo "当前用户: $(whoami)"
+            echo "Node.js 版本: $(node -v 2>/dev/null || echo '未找到')"
+            echo "npm 版本: $(npm -v 2>/dev/null || echo '未找到')"
+            echo "PM2 版本: $(pm2 --version 2>/dev/null || echo '未找到')"
+            
+            # 2. 使用 nvm 切换到项目使用的 Node.js 版本
+            if [ -f ".nvmrc" ]; then
+              echo "使用 .nvmrc 指定的 Node.js 版本"
+              nvm use
+            else
+              echo "使用默认 Node.js 版本"
+              nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+            fi
+            
+            # 3. 进入项目目录
+            cd /root/code/tvpage
+            
+            # 4. 检查当前 git 状态
+            echo "当前分支: $(git branch --show-current 2>/dev/null || echo '未知')"
+            
+            # 5. 更新代码
             git reset --hard
             git pull origin latest
             
-            # 4. 安装依赖（如果有 package.json）
-            if [ -f "package.json" ]; then
-              echo "安装依赖..."
-              npm ci --only=production || npm install --only=production
+            # 6. 安装依赖（使用 npm install 而不是 npm ci）
+            echo "安装依赖..."
+            
+            # 先检查 package.json 是否改变
+            if git diff HEAD~1 HEAD -- package.json 2>/dev/null | grep -q diff; then
+              echo "package.json 有变化，完整安装依赖"
+              rm -rf node_modules
+              npm install
+            else
+              echo "package.json 无变化，跳过完整安装"
+              # 可以只检查是否有缺少的依赖
+              npm install 2>/dev/null || true
             fi
             
-            # 5. 执行构建和启动
+            # 7. 执行 rebuild:start
+            echo "执行 npm run rebuild:start..."
             npm run rebuild:start
+            
+            # 8. 验证部署
+            echo "检查 PM2 状态..."
+            pm2 status
+            
+            echo "✅ 部署完成！"
