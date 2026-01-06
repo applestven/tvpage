@@ -247,12 +247,19 @@ export default function Home() {
         }
       }
     }
-
+    // 成功次数
+    let NUMBER_OF_SUCCESSES = 0;
     // 停止 / 结束规则（与 CLI 一致）
     if (data.status === 'success') {
+      NUMBER_OF_SUCCESSES +=1;
+      // 为了保证最后的转写结果能完整传递完，只有在成功次数达到3次后才真正结束 SSE 连接
+      if (NUMBER_OF_SUCCESSES >= 3) {
+        console.log("成功次数达到3次，结束SSE");
+        return;
+      }
       stoppedRef.current = true;
       setStatus('completed');
-  setPercent(100);
+      setPercent(100);
 
       es.close();
       sseRef.current = null;
@@ -337,7 +344,7 @@ export default function Home() {
         // 注意：dvResult 返回的路径应为 Next.js 能代理访问的地址或者外部可访问地址。
         const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
         if (!audioUrl) throw new Error('download result missing file url');
-
+        console.log('audioUrl result:', dvResult);
         // 创建转写任务（带重试）
         setStatus('transcoding');
         const ttsId = await withRetry(async () => {
@@ -459,10 +466,10 @@ export default function Home() {
         {/* 右侧输出区（卡片分块） */}
         <section className="md:w-3/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow bg-white border border-blue-200 p-6 flex flex-col gap-6">
-            {/* <div>
+            <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">5. 任务状态</h2>
               <StatusIndicator status={status} queue={queue} percent={percent} />
-            </div> */}
+            </div>
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">3. 转写结果</h2>
               <TranscriptStream segments={segments} />
