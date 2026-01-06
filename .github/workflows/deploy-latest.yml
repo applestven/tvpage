@@ -19,11 +19,73 @@ jobs:
           port: 22
           script: |
             set -e
-            # 配置 git 用户信息（可选：由 secrets 提供）
-            git config --global user.name "${{ secrets.GIT_USER_NAME }}"
-            git config --global user.email "${{ secrets.GIT_USER_EMAIL }}"
-
+            
+            # 1. 加载环境变量 - 关键步骤！
+            # 对于非交互式 SSH 会话，需要显式加载
+            export NVM_DIR="$HOME/.nvm"
+            
+            # 方法1: 直接加载 nvm
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              echo "加载 nvm..."
+              source "$NVM_DIR/nvm.sh"
+            fi
+            
+            # 方法2: 加载 bashrc 和 profile
+            if [ -f "$HOME/.bashrc" ]; then
+              echo "加载 .bashrc..."
+              source "$HOME/.bashrc"
+            fi
+            
+            if [ -f "$HOME/.profile" ]; then
+              echo "加载 .profile..."
+              source "$HOME/.profile"
+            fi
+            
+            # 检查环境
+            echo "当前用户: $(whoami)"
+            echo "Node.js 版本: $(node -v 2>/dev/null || echo '未找到')"
+            echo "npm 版本: $(npm -v 2>/dev/null || echo '未找到')"
+            echo "PM2 版本: $(pm2 --version 2>/dev/null || echo '未找到')"
+            
+            # 2. 使用 nvm 切换到项目使用的 Node.js 版本
+            if [ -f ".nvmrc" ]; then
+              echo "使用 .nvmrc 指定的 Node.js 版本"
+              nvm use
+            else
+              echo "使用默认 Node.js 版本"
+              nvm use default 2>/dev/null || nvm use node 2>/dev/null || true
+            fi
+            
+            # 3. 进入项目目录
             cd /root/code/tvpage
+            
+            # 4. 检查当前 git 状态
+            echo "当前分支: $(git branch --show-current 2>/dev/null || echo '未知')"
+            
+            # 5. 更新代码
             git reset --hard
-            git pull
+            git pull origin latest
+            
+            # 6. 安装依赖（使用 npm install 而不是 npm ci）
+            echo "安装依赖..."
+            
+            # 先检查 package.json 是否改变
+            if git diff HEAD~1 HEAD -- package.json 2>/dev/null | grep -q diff; then
+              echo "package.json 有变化，完整安装依赖"
+              rm -rf node_modules
+              npm install
+            else
+              echo "package.json 无变化，跳过完整安装"
+              # 可以只检查是否有缺少的依赖
+              npm install 2>/dev/null || true
+            fi
+            
+            # 7. 执行 rebuild:start
+            echo "执行 npm run rebuild:start..."
             npm run rebuild:start
+            
+            # 8. 验证部署
+            echo "检查 PM2 状态..."
+            pm2 status
+            
+            echo "✅ 部署完成！"
