@@ -4,15 +4,17 @@ import VideoInput from "../components/VideoInput";
 import UploadButton from "../components/UploadButton";
 import LanguageSelector from "../components/LanguageSelector";
 import StatusIndicator, { StatusType } from "../components/StatusIndicator";
-import TranscriptStream, { TranscriptSegment } from "../components/TranscriptStream";
+import TranscriptStream, {
+  TranscriptSegment,
+} from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 
 // 根据部署架构：浏览器 -> Next.js（公网） -> tv/dv（ZeroTier 内网）
 // 前端应通过 Next.js 的 API 路径访问内网服务，由 Next.js 在服务器端代理到真实内网地址。
 // 这样浏览器只访问同域的 /api 路径，避免直接暴露内网地址。
-const DV_API = '/api/dv';
-const TV_API = '/api/tv';
+const DV_API = "/api/dv";
+const TV_API = "/api/tv";
 
 export default function Home() {
   const stoppedRef = useRef(false);
@@ -25,7 +27,10 @@ export default function Home() {
 
   // 视频输入状态
   const [hasVideoInput, setHasVideoInput] = useState<boolean>(false);
-  const inputRef = useRef<{ type: 'url' | 'file' | null; value: string | File | null }>({ type: null, value: null });
+  const inputRef = useRef<{
+    type: "url" | "file" | null;
+    value: string | File | null;
+  }>({ type: null, value: null });
 
   // 转写流与结果
   const [segments, setSegments] = useState<TranscriptSegment[]>([]);
@@ -49,16 +54,23 @@ export default function Home() {
     };
   }, []);
 
-  const handleInputChange = useCallback((hasInput: boolean, type: 'url' | 'file' | null, value: string | File | null) => {
-    setHasVideoInput(hasInput);
-    inputRef.current = { type, value };
-    // 重置之前的任务状态
-    setResultReady(false);
-  setSegments([]);
-  segmentsRef.current = [];
-  setPercent(0);
-    setOutputName(null);
-  }, []);
+  const handleInputChange = useCallback(
+    (
+      hasInput: boolean,
+      type: "url" | "file" | null,
+      value: string | File | null
+    ) => {
+      setHasVideoInput(hasInput);
+      inputRef.current = { type, value };
+      // 重置之前的任务状态
+      setResultReady(false);
+      setSegments([]);
+      segmentsRef.current = [];
+      setPercent(0);
+      setOutputName(null);
+    },
+    []
+  );
 
   // 将秒数数值格式化为 mm:ss 或 hh:mm:ss
   const fmt = (sNum: number) => {
@@ -66,8 +78,12 @@ export default function Home() {
     const hh = Math.floor(s / 3600);
     const mm = Math.floor((s % 3600) / 60);
     const ss = s % 60;
-    if (hh > 0) return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
-    return `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+    if (hh > 0)
+      return `${String(hh).padStart(2, "0")}:${String(mm).padStart(
+        2,
+        "0"
+      )}:${String(ss).padStart(2, "0")}`;
+    return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
   };
 
   // parse time strings like "03:54" or numeric seconds like "12.34" (optionally with trailing 's')
@@ -75,8 +91,8 @@ export default function Home() {
     if (!t) return 0;
     t = String(t).trim();
     // mm:ss or hh:mm:ss
-    if (t.includes(':')) {
-      const parts = t.split(':').map(p => Number(p));
+    if (t.includes(":")) {
+      const parts = t.split(":").map((p) => Number(p));
       if (parts.length === 2) {
         return (parts[0] * 60 + parts[1]) * 1000;
       }
@@ -106,23 +122,23 @@ export default function Home() {
     while (true) {
       try {
         const res = await fetch(`${DV_API}/task/${taskId}`);
-        if (!res.ok) throw new Error('dv task fetch failed');
+        if (!res.ok) throw new Error("dv task fetch failed");
         const data = await res.json();
         // data.status: pending, running, success, failed
-        if (data.status === 'pending' || data.status === 'running') {
-          setStatus('downloading');
+        if (data.status === "pending" || data.status === "running") {
+          setStatus("downloading");
           // 如果返回了正在执行的数量或其它可用字段，可以解析更新
         }
-        if (data.status === 'success') {
+        if (data.status === "success") {
           // 返回的 fullPath 指向下载服务器可访问的文件
           return data;
         }
-        if (data.status === 'failed') {
-          throw new Error(data.error || 'download failed');
+        if (data.status === "failed") {
+          throw new Error(data.error || "download failed");
         }
       } catch (err) {
         console.error(err);
-        setStatus('error');
+        setStatus("error");
         throw err;
       }
       // 等待 2s 再轮询
@@ -142,151 +158,172 @@ export default function Home() {
         }
       }
     } catch (err) {
-      console.error('获取任务详情失败:', err);
+      console.error("获取任务详情失败:", err);
     }
   };
 
   const connectSSE = (ttsId: string) => {
-  // 先终止旧连接
-  stoppedRef.current = false;
+    // 先终止旧连接
+    stoppedRef.current = false;
 
-  if (sseRef.current) {
-    sseRef.current.close();
-    sseRef.current = null;
-  }
-
-  // SSE 也通过 Next.js 路径代理到内网服务
-  const es = new EventSource(`${TV_API}/tts/sse?id=${encodeURIComponent(ttsId)}`);
-  sseRef.current = es;
-
-  setStatus('transcribing');
-
-  // reset duration for this run
-  durationRef.current = null;
-  setPercent(0);
-
-  es.onmessage = (e) => {
-    if (stoppedRef.current) return;
-
-    let data: any;
-    try {
-      data = JSON.parse(e.data);
-    } catch {
-      return;
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
     }
 
-    /** ===============================
-     * 1️⃣ Whisper CLI / 转写服务 输出（logs）
-     * 支持多种时间戳格式：
-     * - Whisper 样式: [12.34s -> 13.56s] text
-     * - ttx 样式:    [03:54 → 03:56] text
-     * =============================== */
-    if (Array.isArray(data.logs)) {
-      const newSegs: TranscriptSegment[] = [];
+    // SSE 也通过 Next.js 路径代理到内网服务
+    const es = new EventSource(
+      `${TV_API}/tts/sse?id=${encodeURIComponent(ttsId)}`
+    );
+    sseRef.current = es;
 
-      for (const line of data.logs) {
-        if (printedRef.current.has(line)) continue;
-        printedRef.current.add(line);
+    setStatus("transcribing");
 
-        // 1) Whisper style seconds '[12.34s -> 13.56s] some text'
-        let m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
-        if (m) {
-          const startMs = Math.round(parseFloat(m[1]) * 1000);
-          const endMs = Math.round(parseFloat(m[2]) * 1000);
-          newSegs.push({ start: fmt(startMs / 1000), end: fmt(endMs / 1000), text: m[3].trim() });
-          // update percent if duration known
-          if (durationRef.current) {
-            const p = Math.min(100, Math.round((startMs / durationRef.current) * 100));
-            setPercent(p);
-          }
-          continue;
-        }
+    // reset duration for this run
+    durationRef.current = null;
+    setPercent(0);
 
-        // 2) Bracket time style '[03:54 → 03:56] optional text'
-        m = line.match(/\[\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:→|->|-)\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*\]\s*(.*)/);
-        if (m) {
-          const startMs = timeStrToMs(m[1]);
-          const endMs = timeStrToMs(m[2]);
-          newSegs.push({ start: fmt(startMs / 1000), end: fmt(endMs / 1000), text: m[3].trim() });
-          if (durationRef.current) {
-            const p = Math.min(100, Math.round((startMs / durationRef.current) * 100));
-            setPercent(p);
-          }
-          continue;
-        }
+    es.onmessage = (e) => {
+      if (stoppedRef.current) return;
 
-        // 3) fallback: no timestamp match — skip
-      }
-
-      if (newSegs.length) {
-        setSegments(prev => {
-          const next = [...prev, ...newSegs];
-          segmentsRef.current = next;
-          return next;
-        });
-      }
-    }
-
-    /** ===============================
-     * 2️⃣ 其它 SSE 消息字段（duration / status / error）
-     * =============================== */
-    // 支持 upstream 在任意消息中下发总时长字段 duration
-    if (data.duration !== undefined && data.duration !== null) {
-      const raw = Number(data.duration);
-      if (!Number.isNaN(raw)) {
-        // 如果看起来像秒则转换为毫秒（阈值：<= 10000 视为秒）
-        durationRef.current = raw > 10000 ? Math.round(raw) : Math.round(raw * 1000);
-        // 尝试用已存在的 segments 更新进度（使用最后一段的 start）
-        if (durationRef.current && segmentsRef.current.length > 0) {
-          const last = segmentsRef.current[segmentsRef.current.length - 1];
-          const lastStartMs = timeStrToMs(last.start);
-          if (lastStartMs > 0) {
-            const p = Math.min(100, Math.round((lastStartMs / durationRef.current) * 100));
-            setPercent(p);
-          }
-        }
-      }
-    }
-    // 成功次数
-    let NUMBER_OF_SUCCESSES = 0;
-    // 停止 / 结束规则（与 CLI 一致）
-    if (data.status === 'success') {
-      NUMBER_OF_SUCCESSES +=1;
-      // 为了保证最后的转写结果能完整传递完，只有在成功次数达到3次后才真正结束 SSE 连接
-      if (NUMBER_OF_SUCCESSES >= 3) {
-        console.log("成功次数达到3次，结束SSE");
+      let data: any;
+      try {
+        data = JSON.parse(e.data);
+      } catch {
         return;
       }
-      stoppedRef.current = true;
-      setStatus('completed');
-      setPercent(100);
 
-      es.close();
-      sseRef.current = null;
+      /** ===============================
+       * 1️⃣ Whisper CLI / 转写服务 输出（logs）
+       * 支持多种时间戳格式：
+       * - Whisper 样式: [12.34s -> 13.56s] text
+       * - ttx 样式:    [03:54 → 03:56] text
+       * =============================== */
+      if (Array.isArray(data.logs)) {
+        const newSegs: TranscriptSegment[] = [];
 
-      // SSE 停止后查询任务详情获取 output_name
-      fetchTaskDetail(ttsId);
-      return;
-    }
+        for (const line of data.logs) {
+          if (printedRef.current.has(line)) continue;
+          printedRef.current.add(line);
 
-    if (data.status === 'failed') {
-      stoppedRef.current = true;
-      console.error('transcribe failed:', data.error);
-      setStatus('error');
+          // 1) Whisper style seconds '[12.34s -> 13.56s] some text'
+          let m = line.match(/\[\s*([\d.]+)s\s*->\s*([\d.]+)s\s*\]\s*(.+)/);
+          if (m) {
+            const startMs = Math.round(parseFloat(m[1]) * 1000);
+            const endMs = Math.round(parseFloat(m[2]) * 1000);
+            newSegs.push({
+              start: fmt(startMs / 1000),
+              end: fmt(endMs / 1000),
+              text: m[3].trim(),
+            });
+            // update percent if duration known
+            if (durationRef.current) {
+              const p = Math.min(
+                100,
+                Math.round((startMs / durationRef.current) * 100)
+              );
+              setPercent(p);
+            }
+            continue;
+          }
 
-      es.close();
-      sseRef.current = null;
-      return;
-    }
+          // 2) Bracket time style '[03:54 → 03:56] optional text'
+          m = line.match(
+            /\[\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:→|->|-)\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*\]\s*(.*)/
+          );
+          if (m) {
+            const startMs = timeStrToMs(m[1]);
+            const endMs = timeStrToMs(m[2]);
+            newSegs.push({
+              start: fmt(startMs / 1000),
+              end: fmt(endMs / 1000),
+              text: m[3].trim(),
+            });
+            if (durationRef.current) {
+              const p = Math.min(
+                100,
+                Math.round((startMs / durationRef.current) * 100)
+              );
+              setPercent(p);
+            }
+            continue;
+          }
+
+          // 3) fallback: no timestamp match — skip
+        }
+
+        if (newSegs.length) {
+          setSegments((prev) => {
+            const next = [...prev, ...newSegs];
+            segmentsRef.current = next;
+            return next;
+          });
+        }
+      }
+
+      /** ===============================
+       * 2️⃣ 其它 SSE 消息字段（duration / status / error）
+       * =============================== */
+      // 支持 upstream 在任意消息中下发总时长字段 duration
+      if (data.duration !== undefined && data.duration !== null) {
+        const raw = Number(data.duration);
+        if (!Number.isNaN(raw)) {
+          // 如果看起来像秒则转换为毫秒（阈值：<= 10000 视为秒）
+          durationRef.current =
+            raw > 10000 ? Math.round(raw) : Math.round(raw * 1000);
+          // 尝试用已存在的 segments 更新进度（使用最后一段的 start）
+          if (durationRef.current && segmentsRef.current.length > 0) {
+            const last = segmentsRef.current[segmentsRef.current.length - 1];
+            const lastStartMs = timeStrToMs(last.start);
+            if (lastStartMs > 0) {
+              const p = Math.min(
+                100,
+                Math.round((lastStartMs / durationRef.current) * 100)
+              );
+              setPercent(p);
+            }
+          }
+        }
+      }
+      // 成功次数
+      let NUMBER_OF_SUCCESSES = 0;
+      // 停止 / 结束规则（与 CLI 一致）
+      if (data.status === "success") {
+        NUMBER_OF_SUCCESSES += 1;
+        // 为了保证最后的转写结果能完整传递完，只有在成功次数达到3次后才真正结束 SSE 连接
+        if (NUMBER_OF_SUCCESSES >= 3) {
+          console.log("成功次数达到3次，结束SSE");
+          return;
+        }
+        stoppedRef.current = true;
+        setStatus("completed");
+        setPercent(100);
+
+        es.close();
+        sseRef.current = null;
+
+        // SSE 停止后查询任务详情获取 output_name
+        fetchTaskDetail(ttsId);
+        return;
+      }
+
+      if (data.status === "failed") {
+        stoppedRef.current = true;
+        console.error("transcribe failed:", data.error);
+        setStatus("error");
+
+        es.close();
+        sseRef.current = null;
+        return;
+      }
+    };
+
+    es.onerror = (err) => {
+      if (stoppedRef.current) return;
+      console.error("SSE error", err);
+      // 和 CLI 一样：不立即 close，等 success / failed
+    };
   };
-
-  es.onerror = (err) => {
-    if (stoppedRef.current) return;
-    console.error('SSE error', err);
-    // 和 CLI 一样：不立即 close，等 success / failed
-  };
-};
-
 
   // 通用重试函数
   const withRetry = async <T,>(
@@ -300,9 +337,12 @@ export default function Home() {
         return await fn();
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`第 ${attempt}/${maxRetries} 次尝试失败:`, lastError.message);
+        console.warn(
+          `第 ${attempt}/${maxRetries} 次尝试失败:`,
+          lastError.message
+        );
         if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, delayMs));
+          await new Promise((r) => setTimeout(r, delayMs));
         }
       }
     }
@@ -321,76 +361,105 @@ export default function Home() {
 
     const current = inputRef.current;
     if (!current.type) return;
-    setStatus('queueing');
+    setStatus("queueing");
 
-    if (current.type === 'url' && typeof current.value === 'string') {
+    if (current.type === "url" && typeof current.value === "string") {
       // 先调用下载服务
       try {
-        setStatus('downloading');
-        
+        setStatus("downloading");
+
         // 提交下载任务（带重试）
         const dvTaskId = await withRetry(async () => {
-          const body = { url: current.value, quality: 'audio_worst' };
-          const res = await fetch(`${DV_API}/download`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-          if (!res.ok) throw new Error('submit download failed');
+          const body = { url: current.value, quality: "audio_low" };
+          const res = await fetch(`${DV_API}/download`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error("submit download failed");
           const rjson = await res.json();
           const taskId = rjson.taskId || rjson.id || rjson.data?.id;
-          if (!taskId) throw new Error('download task id missing');
+          if (!taskId) throw new Error("download task id missing");
           return taskId;
         });
 
         const dvResult = await pollDvTask(dvTaskId);
         // dvResult.fullPath 指向可访问的音频文件
         // 注意：dvResult 返回的路径应为 Next.js 能代理访问的地址或者外部可访问地址。
-        const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
-        if (!audioUrl) throw new Error('download result missing file url');
-        console.log('audioUrl result:', dvResult);
+        const audioUrl =
+          dvResult.fullPath || dvResult.output || dvResult.location;
+        if (!audioUrl) throw new Error("download result missing file url");
+        console.log("audioUrl result:", dvResult);
         // 创建转写任务（带重试）
-        setStatus('transcoding');
+        setStatus("transcoding");
         const ttsId = await withRetry(async () => {
-          const tRes = await fetch(`${TV_API}/tts/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: audioUrl, quality: 'small', languageArray: 'auto' }) });
-          if (!tRes.ok) throw new Error('create tts task failed');
+          const tRes = await fetch(`${TV_API}/tts/task`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: audioUrl,
+              quality: "small",
+              languageArray: "auto",
+            }),
+          });
+          if (!tRes.ok) throw new Error("create tts task failed");
           let tjson: any = {};
-          try { tjson = await tRes.json(); } catch (e) { /* ignore */ }
-          const id = tjson.id || tjson.taskId || tRes.headers.get('Location')?.split('/').pop();
-          if (!id) throw new Error('tts id not found');
+          try {
+            tjson = await tRes.json();
+          } catch (e) {
+            /* ignore */
+          }
+          const id =
+            tjson.id ||
+            tjson.taskId ||
+            tRes.headers.get("Location")?.split("/").pop();
+          if (!id) throw new Error("tts id not found");
           return id;
         });
 
         // 订阅 SSE
         if (ttsId) connectSSE(ttsId);
-
       } catch (err) {
-        console.error('任务失败（已重试3次）:', err);
-        setStatus('error');
+        console.error("任务失败（已重试3次）:", err);
+        setStatus("error");
       }
     }
 
-    if (current.type === 'file' && current.value instanceof File) {
+    if (current.type === "file" && current.value instanceof File) {
       // 上传文件到 TTS 上传接口
       try {
         // 正在上传音频文件
-        setStatus('uploading');
-        
+        setStatus("uploading");
+
         // 上传文件（带重试）
         const ttsId = await withRetry(async () => {
           const fm = new FormData();
-          fm.append('file', current.value as File);
-          fm.append('quality', 'small');
-          fm.append('languageArray', 'auto');
-          const upl = await fetch(`${TV_API}/tts/upload`, { method: 'POST', body: fm });
-          if (!upl.ok) throw new Error('upload failed');
+          fm.append("file", current.value as File);
+          fm.append("quality", "small");
+          fm.append("languageArray", "auto");
+          const upl = await fetch(`${TV_API}/tts/upload`, {
+            method: "POST",
+            body: fm,
+          });
+          if (!upl.ok) throw new Error("upload failed");
           let ujson: any = {};
-          try { ujson = await upl.json(); } catch (e) { /* ignore */ }
-          const id = ujson.id || ujson.taskId || upl.headers.get('Location')?.split('/').pop();
-          if (!id) throw new Error('tts id not found');
+          try {
+            ujson = await upl.json();
+          } catch (e) {
+            /* ignore */
+          }
+          const id =
+            ujson.id ||
+            ujson.taskId ||
+            upl.headers.get("Location")?.split("/").pop();
+          if (!id) throw new Error("tts id not found");
           return id;
         });
 
         if (ttsId) connectSSE(ttsId);
       } catch (err) {
-        console.error('任务失败（已重试3次）:', err);
-        setStatus('error');
+        console.error("任务失败（已重试3次）:", err);
+        setStatus("error");
       }
     }
   };
@@ -400,37 +469,39 @@ export default function Home() {
     // 拼接下载地址（按 docs） 注意本地开发需要加端口
     // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
     const url = `${TV_API}/static/${outputName}`;
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   };
 
   const handleCopyText = async () => {
     if (!outputName) return;
     try {
-      const res = await fetch(`${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`);
-      if (!res.ok) throw new Error('srt to txt failed');
+      const res = await fetch(
+        `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`
+      );
+      if (!res.ok) throw new Error("srt to txt failed");
       const txt = await res.text();
-      
+
       // 优先使用现代 API，兼容移动端
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(txt);
       } else {
         // 降级方案：创建临时 textarea
-        const textarea = document.createElement('textarea');
+        const textarea = document.createElement("textarea");
         textarea.value = txt;
-        textarea.style.position = 'fixed';
-        textarea.style.left = '-9999px';
-        textarea.style.top = '0';
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
         document.body.appendChild(textarea);
         textarea.focus();
         textarea.select();
-        document.execCommand('copy');
+        document.execCommand("copy");
         document.body.removeChild(textarea);
       }
       // 简短提示
-      alert('已复制到剪切板');
+      alert("已复制到剪切板");
     } catch (err) {
       console.error(err);
-      alert('复制失败');
+      alert("复制失败");
     }
   };
 
@@ -438,7 +509,9 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-zinc-50 font-sans">
       {/* Header */}
       <header className="w-full py-6 px-4 border-b bg-white shadow-sm flex items-center justify-center">
-        <span className="text-xl font-bold tracking-tight text-blue-900">Video To Text</span>
+        <span className="text-xl font-bold tracking-tight text-blue-900">
+          Video To Text
+        </span>
       </header>
 
       {/* 主体内容 */}
@@ -448,17 +521,27 @@ export default function Home() {
         <section className="md:w-2/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow-lg bg-white border border-blue-400 p-6 flex flex-col gap-6">
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">1. 视频输入</h2>
-              <p className="text-xs text-blue-700 mb-2">粘贴视频链接或上传本地视频（二选一）</p>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                1. 视频输入
+              </h2>
+              <p className="text-xs text-blue-700 mb-2">
+                粘贴视频链接或上传本地视频（二选一）
+              </p>
               <VideoInput onInputChange={handleInputChange} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">2. 语言选择</h2>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                2. 语言选择
+              </h2>
               <p className="text-xs text-blue-700 mb-2">请选择视频语音的语言</p>
               <LanguageSelector />
             </div>
             <div>
-              <UploadButton disabled={false} active={hasVideoInput} onClick={startTask} />
+              <UploadButton
+                disabled={false}
+                active={hasVideoInput}
+                onClick={startTask}
+              />
             </div>
           </div>
         </section>
@@ -467,16 +550,30 @@ export default function Home() {
         <section className="md:w-3/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow bg-white border border-blue-200 p-6 flex flex-col gap-6">
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">5. 任务状态</h2>
-              <StatusIndicator status={status} queue={queue} percent={percent} />
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                5. 任务状态
+              </h2>
+              <StatusIndicator
+                status={status}
+                queue={queue}
+                percent={percent}
+              />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">3. 转写结果</h2>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                3. 转写结果
+              </h2>
               <TranscriptStream segments={segments} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">4. 结果操作</h2>
-              <ResultActions disabled={!resultReady} onDownload={handleDownloadSubtitle} onCopy={handleCopyText} />
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                4. 结果操作
+              </h2>
+              <ResultActions
+                disabled={!resultReady}
+                onDownload={handleDownloadSubtitle}
+                onCopy={handleCopyText}
+              />
             </div>
           </div>
         </section>
