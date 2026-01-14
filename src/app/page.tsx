@@ -9,6 +9,7 @@ import TranscriptStream, {
 } from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { fetchWithRetry, withRetry } from "../lib/fetchWithRetry";
 
 // 根据部署架构：浏览器 -> Next.js（公网） -> tv/dv（ZeroTier 内网）
 // 前端应通过 Next.js 的 API 路径访问内网服务，由 Next.js 在服务器端代理到真实内网地址。
@@ -119,11 +120,16 @@ export default function Home() {
 
   // 轮询 DV 下载任务详情
   const pollDvTask = async (taskId: string) => {
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+
     while (true) {
       try {
-        const res = await fetch(`${DV_API}/task/${taskId}`);
+        const res = await fetchWithRetry(`${DV_API}/task/${taskId}`);
         if (!res.ok) throw new Error("dv task fetch failed");
         const data = await res.json();
+        // 请求成功，重置错误计数
+        consecutiveErrors = 0;
         // data.status: pending, running, success, failed
         if (data.status === "pending" || data.status === "running") {
           setStatus("downloading");
@@ -137,9 +143,12 @@ export default function Home() {
           throw new Error(data.error || "download failed");
         }
       } catch (err) {
-        console.error(err);
-        setStatus("error");
-        throw err;
+        consecutiveErrors++;
+        console.error(`轮询失败 (${consecutiveErrors}/${maxConsecutiveErrors}):`, err);
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          setStatus("error");
+          throw err;
+        }
       }
       // 等待 2s 再轮询
       await new Promise((r) => setTimeout(r, 2000));
@@ -149,7 +158,7 @@ export default function Home() {
   // 查询 TTS 任务详情
   const fetchTaskDetail = async (ttsId: string) => {
     try {
-      const detailRes = await fetch(`${TV_API}/tts/${ttsId}`);
+      const detailRes = await fetchWithRetry(`${TV_API}/tts/${ttsId}`);
       if (detailRes.ok) {
         const detailData = await detailRes.json();
         if (detailData.output_name) {
@@ -325,30 +334,6 @@ export default function Home() {
     };
   };
 
-  // 通用重试函数
-  const withRetry = async <T,>(
-    fn: () => Promise<T>,
-    maxRetries: number = 3,
-    delayMs: number = 1000
-  ): Promise<T> => {
-    let lastError: Error | null = null;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(
-          `第 ${attempt}/${maxRetries} 次尝试失败:`,
-          lastError.message
-        );
-        if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, delayMs));
-        }
-      }
-    }
-    throw lastError;
-  };
-
   const startTask = async () => {
     // 中断上一次 SSE（等价 Ctrl+C）
     stoppedRef.current = true;
@@ -368,10 +353,10 @@ export default function Home() {
       try {
         setStatus("downloading");
 
-        // 提交下载任务（带重试）
+        // 提交下载任务（带重试和超时）
         const dvTaskId = await withRetry(async () => {
           const body = { url: current.value, quality: "audio_low" };
-          const res = await fetch(`${DV_API}/download`, {
+          const res = await fetchWithRetry(`${DV_API}/download`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -390,10 +375,10 @@ export default function Home() {
           dvResult.fullPath || dvResult.output || dvResult.location;
         if (!audioUrl) throw new Error("download result missing file url");
         console.log("audioUrl result:", dvResult);
-        // 创建转写任务（带重试）
+        // 创建转写任务（带重试和超时）
         setStatus("transcoding");
         const ttsId = await withRetry(async () => {
-          const tRes = await fetch(`${TV_API}/tts/task`, {
+          const tRes = await fetchWithRetry(`${TV_API}/tts/task`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -431,15 +416,16 @@ export default function Home() {
         // 正在上传音频文件
         setStatus("uploading");
 
-        // 上传文件（带重试）
+        // 上传文件（带重试，但不设置超时，因为上传可能耗时较长）
         const ttsId = await withRetry(async () => {
           const fm = new FormData();
           fm.append("file", current.value as File);
           fm.append("quality", "small");
           fm.append("languageArray", "auto");
-          const upl = await fetch(`${TV_API}/tts/upload`, {
+          const upl = await fetchWithRetry(`${TV_API}/tts/upload`, {
             method: "POST",
             body: fm,
+            isUpload: true, // 上传请求不设置超时
           });
           if (!upl.ok) throw new Error("upload failed");
           let ujson: any = {};
@@ -475,7 +461,7 @@ export default function Home() {
   const handleCopyText = async () => {
     if (!outputName) return;
     try {
-      const res = await fetch(
+      const res = await fetchWithRetry(
         `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`
       );
       if (!res.ok) throw new Error("srt to txt failed");

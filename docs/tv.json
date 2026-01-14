@@ -33,7 +33,7 @@
                                     },
                                     "quality": {
                                         "type": "string",
-                                        "example": "small"
+                                        "example": "medium"
                                     },
                                     "languageArray": {
                                         "type": "string",
@@ -76,7 +76,7 @@
                                     "summary": "基本参数",
                                     "value": {
                                         "url": "http://192.168.191.168:3456/downloads/2025-12-27T03-05-12.168Z.mp3",
-                                        "quality": "small",
+                                        "quality": "medium",
                                         "languageArray": "zh"
                                     }
                                 }
@@ -130,6 +130,21 @@
                     }
                 },
                 "summary": "获取队列状态",
+                "tags": [
+                    "TTS 任务"
+                ]
+            }
+        },
+        "/tts/stats": {
+            "get": {
+                "operationId": "TaskController_getTaskStats",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "summary": "获取任务统计信息",
                 "tags": [
                     "TTS 任务"
                 ]
@@ -355,6 +370,215 @@
                     "文件管理"
                 ]
             }
+        },
+        "/admin-log": {
+            "post": {
+                "description": "添加一个新的管理员操作日志记录",
+                "operationId": "AdminLogController_create",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateAdminLogDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "成功创建管理员日志",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ResponseAdminLogDto"
+                                },
+                                "example": {
+                                    "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                                    "name": "admin_user",
+                                    "address": "/api/admin/users/create",
+                                    "created_at": "2023-01-01T00:00:00.000Z"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误"
+                    }
+                },
+                "summary": "创建管理员日志",
+                "tags": [
+                    "管理员日志"
+                ]
+            },
+            "get": {
+                "description": "查询所有管理员操作日志记录",
+                "operationId": "AdminLogController_findAll",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "成功获取所有管理员日志",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ResponseAdminLogDto"
+                                    }
+                                },
+                                "example": [
+                                    {
+                                        "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                                        "name": "admin_user",
+                                        "address": "/api/admin/users/create",
+                                        "created_at": "2023-01-01T00:00:00.000Z"
+                                    },
+                                    {
+                                        "id": "b2c3d4e5-f6g7-8901-2345-67890abcdef123",
+                                        "name": "another_admin",
+                                        "address": "/api/admin/settings/update",
+                                        "created_at": "2023-01-02T10:30:00.000Z"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "summary": "获取所有管理员日志",
+                "tags": [
+                    "管理员日志"
+                ]
+            }
+        },
+        "/admin-log/{id}": {
+            "get": {
+                "description": "通过唯一ID查询单条管理员操作日志",
+                "operationId": "AdminLogController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "description": "日志记录的唯一ID",
+                        "schema": {
+                            "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功获取管理员日志",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ResponseAdminLogDto"
+                                },
+                                "example": {
+                                    "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                                    "name": "admin_user",
+                                    "address": "/api/admin/users/create",
+                                    "created_at": "2023-01-01T00:00:00.000Z"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "日志不存在"
+                    }
+                },
+                "summary": "根据ID获取管理员日志",
+                "tags": [
+                    "管理员日志"
+                ]
+            },
+            "put": {
+                "description": "通过ID更新指定的管理员操作日志",
+                "operationId": "AdminLogController_update",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "description": "日志记录的唯一ID",
+                        "schema": {
+                            "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateAdminLogDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "成功更新管理员日志",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ResponseAdminLogDto"
+                                },
+                                "example": {
+                                    "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                                    "name": "updated_admin",
+                                    "address": "/api/admin/users/updated",
+                                    "created_at": "2023-01-01T00:00:00.000Z"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "日志不存在"
+                    }
+                },
+                "summary": "更新管理员日志",
+                "tags": [
+                    "管理员日志"
+                ]
+            },
+            "delete": {
+                "description": "通过ID删除指定的管理员操作日志",
+                "operationId": "AdminLogController_remove",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "description": "日志记录的唯一ID",
+                        "schema": {
+                            "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功删除管理员日志",
+                        "content": {
+                            "application/json": {
+                                "example": {
+                                    "success": true
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "日志不存在"
+                    }
+                },
+                "summary": "删除管理员日志",
+                "tags": [
+                    "管理员日志"
+                ]
+            }
         }
     },
     "info": {
@@ -383,6 +607,72 @@
                 "required": [
                     "filename"
                 ]
+            },
+            "CreateAdminLogDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "管理员姓名或标识",
+                        "example": "admin_user"
+                    },
+                    "address": {
+                        "type": "string",
+                        "description": "操作地址",
+                        "example": "/api/admin/users/create"
+                    }
+                },
+                "required": [
+                    "name",
+                    "address"
+                ]
+            },
+            "ResponseAdminLogDto": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "管理员日志ID",
+                        "example": "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "管理员姓名或标识",
+                        "example": "admin_user"
+                    },
+                    "address": {
+                        "type": "string",
+                        "description": "操作地址",
+                        "example": "/api/admin/users/create"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string",
+                        "description": "创建时间",
+                        "example": "2023-01-01T00:00:00.000Z"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "address",
+                    "created_at"
+                ]
+            },
+            "UpdateAdminLogDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "管理员姓名或标识",
+                        "example": "admin_user"
+                    },
+                    "address": {
+                        "type": "string",
+                        "description": "操作地址",
+                        "example": "/api/admin/users/create"
+                    }
+                }
             }
         }
     }
