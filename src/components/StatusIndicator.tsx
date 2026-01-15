@@ -21,7 +21,7 @@ const StatusIndicator: React.FC<{ status: StatusType; queue?: number; percent?: 
     display += `（已完成 ${percent}%）`;
   }
   return (
-    <div className={`fixed top-4 right-4 px-4 py-2 rounded shadow ${statusMap[status].color} z-50`}>{display}</div>
+    <div className={`fixed top-4 left-4 px-4 py-2 rounded shadow ${statusMap[status].color} z-50`}>{display}</div>
   );
 };
 

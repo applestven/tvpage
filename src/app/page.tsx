@@ -8,6 +8,7 @@ import TranscriptStream, {
   TranscriptSegment,
 } from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
+import TaskHistory, { TaskHistoryHandle } from "../components/TaskHistory";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { fetchWithRetry, withRetry } from "../lib/fetchWithRetry";
 
@@ -40,6 +41,9 @@ export default function Home() {
   const sseRef = useRef<EventSource | null>(null);
   // store duration (ms) reported by SSE messages
   const durationRef = useRef<number | null>(null);
+
+  // 引用任务历史组件
+  const taskHistoryRef = useRef<TaskHistoryHandle>(null);
 
   useEffect(() => {
     return () => {
@@ -346,12 +350,20 @@ export default function Home() {
 
     const current = inputRef.current;
     if (!current.type) return;
+    
+    // 获取视频源描述
+    const videoSource = current.type === 'url' ? current.value as string : (current.value as File).name;
+    
+    // 添加到任务历史
+    const taskId = taskHistoryRef.current?.addTask(videoSource) || '';
     setStatus("queueing");
+    taskHistoryRef.current?.updateTaskStatus(taskId, "queueing");
 
     if (current.type === "url" && typeof current.value === "string") {
       // 先调用下载服务
       try {
         setStatus("downloading");
+        taskHistoryRef.current?.updateTaskStatus(taskId, "downloading");
 
         // 提交下载任务（带重试和超时）
         const dvTaskId = await withRetry(async () => {
@@ -377,6 +389,7 @@ export default function Home() {
         console.log("audioUrl result:", dvResult);
         // 创建转写任务（带重试和超时）
         setStatus("transcoding");
+        taskHistoryRef.current?.updateTaskStatus(taskId, "transcoding");
         const ttsId = await withRetry(async () => {
           const tRes = await fetchWithRetry(`${TV_API}/tts/task`, {
             method: "POST",
@@ -403,10 +416,14 @@ export default function Home() {
         });
 
         // 订阅 SSE
-        if (ttsId) connectSSE(ttsId);
+        if (ttsId) {
+          connectSSE(ttsId);
+          taskHistoryRef.current?.updateTaskStatus(taskId, "transcribing", 0);
+        }
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
+        taskHistoryRef.current?.updateTaskStatus(taskId, "error");
       }
     }
 
@@ -415,6 +432,7 @@ export default function Home() {
       try {
         // 正在上传音频文件
         setStatus("uploading");
+        taskHistoryRef.current?.updateTaskStatus(taskId, "uploading");
 
         // 上传文件（带重试，但不设置超时，因为上传可能耗时较长）
         const ttsId = await withRetry(async () => {
@@ -442,10 +460,14 @@ export default function Home() {
           return id;
         });
 
-        if (ttsId) connectSSE(ttsId);
+        if (ttsId) {
+          connectSSE(ttsId);
+          taskHistoryRef.current?.updateTaskStatus(taskId, "transcribing", 0);
+        }
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
+        taskHistoryRef.current?.updateTaskStatus(taskId, "error");
       }
     }
   };
@@ -456,6 +478,10 @@ export default function Home() {
     // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
     const url = `${TV_API}/static/${outputName}`;
     window.open(url, "_blank");
+    
+    // 更新任务历史中的结果链接
+    // 这里我们可以尝试找到当前任务并更新结果URL，但这需要追踪当前任务ID
+    // 目前的实现中我们没有保持对当前任务ID的引用，所以跳过这一步
   };
 
   const handleCopyText = async () => {
@@ -494,10 +520,22 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 font-sans">
       {/* Header */}
-      <header className="w-full py-6 px-4 border-b bg-white shadow-sm flex items-center justify-center">
-        <span className="text-xl font-bold tracking-tight text-blue-900">
-          Video To Text
-        </span>
+      <header className="w-full py-6 px-4 border-b bg-white shadow-sm flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <span className="text-xl font-bold tracking-tight text-blue-900">
+            Video To Text
+          </span>
+          <div className="ml-4">
+            <StatusIndicator
+              status={status}
+              queue={queue}
+              percent={percent}
+            />
+          </div>
+        </div>
+        <div className="flex items-center space-x-4">
+          <TaskHistory ref={taskHistoryRef} />
+        </div>
       </header>
 
       {/* 主体内容 */}
@@ -535,16 +573,6 @@ export default function Home() {
         {/* 右侧输出区（卡片分块） */}
         <section className="md:w-3/5 w-full flex flex-col gap-6">
           <div className="rounded-2xl shadow bg-white border border-blue-200 p-6 flex flex-col gap-6">
-            <div>
-              <h2 className="text-lg font-bold text-blue-900 mb-1">
-                5. 任务状态
-              </h2>
-              <StatusIndicator
-                status={status}
-                queue={queue}
-                percent={percent}
-              />
-            </div>
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">
                 3. 转写结果
