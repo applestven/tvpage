@@ -199,10 +199,14 @@ export default function Home() {
        * - Whisper 样式: [12.34s -> 13.56s] text
        * - ttx 样式:    [03:54 → 03:56] text
        * =============================== */
-      if (Array.isArray(data.logs)) {
+      // 检查 logs 或 content 数组
+      const logLines = Array.isArray(data.logs) ? data.logs : 
+                      Array.isArray(data.content) ? data.content : [];
+                      
+      if (logLines.length > 0) {
         const newSegs: TranscriptSegment[] = [];
 
-        for (const line of data.logs) {
+        for (const line of logLines) {
           if (printedRef.current.has(line)) continue;
           printedRef.current.add(line);
 
