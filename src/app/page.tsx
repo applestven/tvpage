@@ -39,6 +39,8 @@ export default function Home() {
   const sseRef = useRef<EventSource | null>(null);
   // store duration (ms) reported by SSE messages
   const durationRef = useRef<number | null>(null);
+  // track success count for closing SSE connection
+  const successCountRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
@@ -68,6 +70,7 @@ export default function Home() {
       segmentsRef.current = [];
       setPercent(0);
       setOutputName(null);
+      successCountRef.current = 0; // 重置成功计数
     },
     []
   );
@@ -162,9 +165,54 @@ export default function Home() {
     }
   };
 
+  // 轮询 TTS 任务状态
+  const pollTTSTask = async (ttsId: string) => {
+    while (!stoppedRef.current) {
+      try {
+        const res = await fetch(`${TV_API}/tts/${ttsId}`);
+        if (!res.ok) throw new Error(`tts task fetch failed with status ${res.status}`);
+        const data = await res.json();
+        // data.status: pending, running, success, failed
+        if (data.status === "running") {
+          setStatus("transcribing");
+          // 如果返回了进度信息，可以更新进度
+          if (data.progress !== undefined) {
+            setPercent(Math.min(100, Math.max(0, data.progress)));
+          }
+          
+          // 当状态为running时，启动SSE连接并停止轮询
+          connectSSE(ttsId);
+          return; // 停止轮询
+        } else if (data.status === "success") {
+          if (stoppedRef.current) return; // 避免重复处理
+          
+          setStatus("completed");
+          setPercent(100);
+          setOutputName(data.output_name);
+          setResultReady(true);
+          return data;
+        } else if (data.status === "failed") {
+          if (stoppedRef.current) return; // 避免在SSE已处理的情况下重复处理
+          
+          setStatus("error");
+          throw new Error(data.error || "tts task failed");
+        }
+      } catch (err) {
+        console.error("轮询TTS任务失败:", err);
+        if (!stoppedRef.current) { // 仅在任务未被其他方式停止时设置错误
+          setStatus("error");
+        }
+        break;
+      }
+      // 等待 3s 再轮询
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  };
+
   const connectSSE = (ttsId: string) => {
     // 先终止旧连接
     stoppedRef.current = false;
+    successCountRef.current = 0; // 重置成功计数
 
     if (sseRef.current) {
       sseRef.current.close();
@@ -289,26 +337,24 @@ export default function Home() {
           }
         }
       }
-      // 成功次数
-      let NUMBER_OF_SUCCESSES = 0;
+
       // 停止 / 结束规则（与 CLI 一致）
       if (data.status === "success") {
-        NUMBER_OF_SUCCESSES += 1;
+        successCountRef.current += 1;
         // 为了保证最后的转写结果能完整传递完，只有在成功次数达到3次后才真正结束 SSE 连接
-        if (NUMBER_OF_SUCCESSES >= 3) {
+        if (successCountRef.current >= 3) {
           console.log("成功次数达到3次，结束SSE");
+          stoppedRef.current = true;
+          setStatus("completed");
+          setPercent(100);
+
+          es.close();
+          sseRef.current = null;
+
+          // 查询任务详情获取 output_name
+          fetchTaskDetail(ttsId);
           return;
         }
-        stoppedRef.current = true;
-        setStatus("completed");
-        setPercent(100);
-
-        es.close();
-        sseRef.current = null;
-
-        // SSE 停止后查询任务详情获取 output_name
-        fetchTaskDetail(ttsId);
-        return;
       }
 
       if (data.status === "failed") {
@@ -325,7 +371,12 @@ export default function Home() {
     es.onerror = (err) => {
       if (stoppedRef.current) return;
       console.error("SSE error", err);
-      // 和 CLI 一样：不立即 close，等 success / failed
+      
+      // 如果SSE出现错误，启动轮询作为备用方案
+      console.warn("SSE连接出错，启动轮询作为备用方案");
+      pollTTSTask(ttsId).catch(error => {
+        console.error("轮询TTS任务也失败了:", error);
+      });
     };
   };
 
@@ -421,8 +472,13 @@ export default function Home() {
           return id;
         });
 
-        // 订阅 SSE
-        if (ttsId) connectSSE(ttsId);
+        // 同时启动SSE和轮询，看哪个先返回结果
+        connectSSE(ttsId);
+        
+        // 启动轮询作为备用方案
+        pollTTSTask(ttsId).catch(error => {
+          console.error("轮询TTS任务失败:", error);
+        });
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
@@ -460,52 +516,19 @@ export default function Home() {
           return id;
         });
 
-        if (ttsId) connectSSE(ttsId);
+        // 同时启动SSE和轮询，看哪个先返回结果
+        if (ttsId) {
+          connectSSE(ttsId);
+          
+          // 启动轮询作为备用方案
+          pollTTSTask(ttsId).catch(error => {
+            console.error("轮询TTS任务失败:", error);
+          });
+        }
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
       }
-    }
-  };
-
-  const handleDownloadSubtitle = () => {
-    if (!outputName) return;
-    // 拼接下载地址（按 docs） 注意本地开发需要加端口
-    // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
-    const url = `${TV_API}/static/${outputName}`;
-    window.open(url, "_blank");
-  };
-
-  const handleCopyText = async () => {
-    if (!outputName) return;
-    try {
-      const res = await fetch(
-        `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`
-      );
-      if (!res.ok) throw new Error("srt to txt failed");
-      const txt = await res.text();
-
-      // 优先使用现代 API，兼容移动端
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(txt);
-      } else {
-        // 降级方案：创建临时 textarea
-        const textarea = document.createElement("textarea");
-        textarea.value = txt;
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        textarea.style.top = "0";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-      // 简短提示
-      alert("已复制到剪切板");
-    } catch (err) {
-      console.error(err);
-      alert("复制失败");
     }
   };
 
@@ -575,8 +598,45 @@ export default function Home() {
               </h2>
               <ResultActions
                 disabled={!resultReady}
-                onDownload={handleDownloadSubtitle}
-                onCopy={handleCopyText}
+                onDownload={() => {
+                  if (!outputName) return;
+                  // 拼接下载地址（按 docs） 注意本地开发需要加端口
+                  // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
+                  const url = `${TV_API}/static/${outputName}`;
+                  window.open(url, "_blank");
+                }}
+                onCopy={async () => {
+                  if (!outputName) return;
+                  try {
+                    const res = await fetch(
+                      `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`
+                    );
+                    if (!res.ok) throw new Error("srt to txt failed");
+                    const txt = await res.text();
+
+                    // 优先使用现代 API，兼容移动端
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                      await navigator.clipboard.writeText(txt);
+                    } else {
+                      // 降级方案：创建临时 textarea
+                      const textarea = document.createElement("textarea");
+                      textarea.value = txt;
+                      textarea.style.position = "fixed";
+                      textarea.style.left = "-9999px";
+                      textarea.style.top = "0";
+                      document.body.appendChild(textarea);
+                      textarea.focus();
+                      textarea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textarea);
+                    }
+                    // 简短提示
+                    alert("已复制到剪切板");
+                  } catch (err) {
+                    console.error(err);
+                    alert("复制失败");
+                  }
+                }}
               />
             </div>
           </div>
