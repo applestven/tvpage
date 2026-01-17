@@ -5,7 +5,7 @@
  */
 
 // 默认超时时间 3 秒
-const DEFAULT_TIMEOUT = 3000;
+const DEFAULT_TIMEOUT = 6000;
 // 默认重试次数
 const DEFAULT_MAX_RETRIES = 3;
 // 重试间隔
