@@ -585,9 +585,9 @@ export default function Home() {
       {/* Header */}
       <header className="w-full py-6 px-4 border-b bg-white shadow-sm flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <span className="text-xl font-bold tracking-tight text-blue-900">
+          {/* <span className="text-xl font-bold tracking-tight text-blue-900">
             Video To Text
-          </span>
+          </span> */}
           <div className="ml-4">
             <StatusIndicator
               status={status}
