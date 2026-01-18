@@ -13,8 +13,11 @@ const statusMap: Record<StatusType, { color: string; text: string }> = {
 };
 
 const StatusIndicator: React.FC<{ status: StatusType; queue?: number; percent?: number }> = ({ status, queue, percent }) => {
+  // 当状态为排队且队列为 0 或未提供时，不显示
+  if (status === 'queueing' && (!queue || queue <= 0)) return null;
+
   let display = statusMap[status].text;
-  if (status === 'queueing' && typeof queue === 'number') {
+  if (status === 'queueing' && typeof queue === 'number' && queue > 0) {
     display += `，前面还有 ${queue} 个任务`;
   }
   if (status === 'transcribing' && typeof percent === 'number') {

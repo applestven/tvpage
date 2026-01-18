@@ -50,6 +50,24 @@ export default function Home() {
   const successCountRef = useRef<number>(0);
 
   useEffect(() => {
+    // 初始化：查询 TTS 队列状态，仅当有排队时展示数量
+    const initQueue = async () => {
+      try {
+        const res = await fetchWithRetry(`${TV_API}/tts/queue/status`);
+        if (res.ok) {
+          const data = await res.json();
+          // 兼容字段：running/queued/concurrency/queuedTaskIds
+          const queued = Number(data?.queued ?? 0);
+          setQueue(queued);
+          if (queued > 0) setStatus('queueing');
+        }
+      } catch (e) {
+        // 忽略初始化队列查询失败，不影响页面其它功能
+        console.warn('初始化队列状态失败', e);
+      }
+    };
+    initQueue();
+
     return () => {
       // cleanup SSE on unmount
       if (sseRef.current) {
