@@ -221,6 +221,50 @@ const TaskHistory = forwardRef<TaskHistoryHandle, TaskHistoryProps>(({ onRetry }
     }
   };
 
+  // 状态图标（仅图标显示，颜色与状态一致）
+  const StatusIcon: React.FC<{ status: TaskItem['status'] }> = ({ status }) => {
+    const color = getStatusColor(status);
+    const label = getStatusText(status);
+    const base = 'inline-flex items-center justify-center w-6 h-6 rounded-full';
+    const iconClass = `${base} ${color}`;
+    if (status === 'completed') {
+      return (
+        <span className={iconClass} title={label} aria-label={label}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.172 7.707 8.879A1 1 0 106.293 10.293l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+        </span>
+      );
+    }
+    if (status === 'error') {
+      return (
+        <span className={iconClass} title={label} aria-label={label}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.293 7.293a1 1 0 011.414 0L10 7.586l.293-.293a1 1 0 111.414 1.414L11.414 9l.293.293a1 1 0 11-1.414 1.414L10 10.414l-.293.293a1 1 0 11-1.414-1.414L8.586 9l-.293-.293a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </span>
+      );
+    }
+    if (status === 'queueing') {
+      return (
+        <span className={iconClass} title={label} aria-label={label}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM10 6a1 1 0 011 1v2.382l1.447.724a1 1 0 01-.894 1.788l-2-1A1 1 0 019 10V7a1 1 0 011-1z" clipRule="evenodd" />
+          </svg>
+        </span>
+      );
+    }
+    // 进行中统一用旋转指示
+    return (
+      <span className={iconClass} title={label} aria-label={label}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4 animate-spin">
+          <circle cx="12" cy="12" r="10" strokeWidth="4" className="opacity-25"></circle>
+          <path d="M4 12a8 8 0 018-8" strokeWidth="4" className="opacity-75"></path>
+        </svg>
+      </span>
+    );
+  };
+
   // 获取状态颜色
   const getStatusColor = (status: TaskItem['status']) => {
     switch (status) {
@@ -336,7 +380,6 @@ const TaskHistory = forwardRef<TaskHistoryHandle, TaskHistoryProps>(({ onRetry }
                           <th className="px-3 py-2">来源</th>
                           <th className="px-3 py-2">状态</th>
                           <th className="px-3 py-2">进度</th>
-                          <th className="px-3 py-2">时间</th>
                           <th className="px-3 py-2">操作</th>
                         </tr>
                       </thead>
@@ -355,33 +398,38 @@ const TaskHistory = forwardRef<TaskHistoryHandle, TaskHistoryProps>(({ onRetry }
                                 )}
                               </td>
                               <td className="px-3 py-2">
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>{statusText}</span>
+                                <StatusIcon status={task.status} />
                               </td>
                               <td className="px-3 py-2 text-gray-600">
                                 {task.progress > 0 && task.progress < 100 ? `${task.progress}%` : isCompleted ? '100%' : '-'}
-                              </td>
-                              <td className="px-3 py-2 text-gray-600">
-                                {formatDate(task.createdAt)}{task.completedAt ? ` - ${formatDate(task.completedAt)}` : ''}
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex items-center gap-2">
                                   {/* 下载字幕 */}
                                   <button
-                                    className={`px-2 py-1 rounded border text-xs ${isCompleted ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                    className={`p-1.5 rounded border ${isCompleted ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : 'border-gray-200 text-gray-400 cursor-not-allowed opacity-60'}`}
                                     disabled={!isCompleted}
+                                    title="下载字幕"
+                                    aria-label="下载字幕"
                                     onClick={() => {
                                       if (!isCompleted || !task.resultUrl) return;
                                       window.open(task.resultUrl, '_blank');
                                     }}
-                                  >下载字幕</button>
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                      <path d="M3 14a1 1 0 011-1h2v2H4a1 1 0 01-1-1zM7 13h6v2H7v-2zM15 13h1a1 1 0 010 2h-1v-2z" />
+                                      <path d="M10 3a1 1 0 011 1v6.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3A1 1 0 016.707 9.293L8 10.586V4a1 1 0 011-1z" />
+                                    </svg>
+                                  </button>
                                   {/* 复制文本 */}
                                   <button
-                                    className={`px-2 py-1 rounded border text-xs ${isCompleted ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                    className={`p-1.5 rounded border ${isCompleted ? 'border-blue-300 text-blue-700 hover:bg-blue-50' : 'border-gray-200 text-gray-400 cursor-not-allowed opacity-60'}`}
                                     disabled={!isCompleted}
+                                    title="复制文本"
+                                    aria-label="复制文本"
                                     onClick={async () => {
                                       if (!isCompleted || !task.resultUrl) return;
                                       try {
-                                        // 假设后端提供 srt-to-txt 接口时，resultUrl 为 /api/tv/static/<file.srt>
                                         const fileName = task.resultUrl.split('/').pop() || '';
                                         const base = task.resultUrl.replace(/\/static\/[^/]+$/, '');
                                         const res = await fetch(`${base}/tts/srt-to-txt?file=${encodeURIComponent(fileName)}`);
@@ -394,23 +442,40 @@ const TaskHistory = forwardRef<TaskHistoryHandle, TaskHistoryProps>(({ onRetry }
                                         console.error(e);
                                       }
                                     }}
-                                  >复制文本</button>
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                      <path d="M6 4a2 2 0 012-2h6a2 2 0 012 2v10a2 2 0 01-2 2H8a2 2 0 01-2-2V4z" />
+                                      <path d="M4 6a2 2 0 012-2v10a4 4 0 004 4H6a2 2 0 01-2-2V6z" />
+                                    </svg>
+                                  </button>
                                   {/* 重试 */}
                                   <button
-                                    className={`px-2 py-1 rounded border text-xs ${isFailed ? 'border-amber-300 text-amber-700 hover:bg-amber-50' : 'border-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                    className={`p-1.5 rounded border ${isFailed ? 'border-amber-300 text-amber-700 hover:bg-amber-50' : 'border-gray-200 text-gray-400 cursor-not-allowed opacity-60'}`}
                                     disabled={!isFailed}
+                                    title="重试"
+                                    aria-label="重试"
                                     onClick={() => {
                                       if (isFailed) {
                                         if (onRetry) onRetry(task);
                                         else updateTaskStatus(task.id, 'queueing', 0);
                                       }
                                     }}
-                                  >重试</button>
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                      <path d="M2 10a8 8 0 1113.657 5.657 1 1 0 11-1.414-1.414A6 6 0 1010 4v2a1 1 0 11-2 0V3a1 1 0 011-1h3a1 1 0 110 2h-1.1A8.001 8.001 0 012 10z" />
+                                    </svg>
+                                  </button>
                                   {/* 删除 */}
                                   <button
-                                    className="px-2 py-1 rounded border text-xs border-red-200 text-red-600 hover:bg-red-50"
+                                    className="p-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50"
+                                    title="删除"
+                                    aria-label="删除"
                                     onClick={() => removeTask(task.id)}
-                                  >删除</button>
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+                                      <path fillRule="evenodd" d="M6 8a1 1 0 112 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 112 0v6a1 1 0 11-2 0V8zm-2-5a2 2 0 00-2 2H5a1 1 0 000 2h10a1 1 0 100-2h-1a2 2 0 00-2-2H8zM6 18a2 2 0 01-2-2V7h12v9a2 2 0 01-2 2H6z" clipRule="evenodd" />
+                                    </svg>
+                                  </button>
                                 </div>
                               </td>
                             </tr>
