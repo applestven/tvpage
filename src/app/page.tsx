@@ -8,7 +8,10 @@ import TranscriptStream, {
   TranscriptSegment,
 } from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
-import TaskHistory, { TaskHistoryHandle, TaskItem } from "../components/TaskHistory";
+import TaskHistory, {
+  TaskHistoryHandle,
+  TaskItem,
+} from "../components/TaskHistory";
 import FeedbackButton from "@/components/FeedbackButton";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { fetchWithRetry, withRetry } from "../lib/fetchWithRetry";
@@ -60,11 +63,11 @@ export default function Home() {
           // 兼容字段：running/queued/concurrency/queuedTaskIds
           const queued = Number(data?.queued ?? 0);
           setQueue(queued);
-          if (queued > 0) setStatus('queueing');
+          if (queued > 0) setStatus("queueing");
         }
       } catch (e) {
         // 忽略初始化队列查询失败，不影响页面其它功能
-        console.warn('初始化队列状态失败', e);
+        console.warn("初始化队列状态失败", e);
       }
     };
     initQueue();
@@ -172,7 +175,10 @@ export default function Home() {
         }
       } catch (err) {
         consecutiveErrors++;
-        console.error(`轮询失败 (${consecutiveErrors}/${maxConsecutiveErrors}):`, err);
+        console.error(
+          `轮询失败 (${consecutiveErrors}/${maxConsecutiveErrors}):`,
+          err
+        );
         if (consecutiveErrors >= maxConsecutiveErrors) {
           setStatus("error");
           throw err;
@@ -196,7 +202,12 @@ export default function Home() {
           const taskId = currentTaskIdRef.current;
           if (taskId) {
             const resultUrl = `${TV_API}/static/${detailData.output_name}`;
-            taskHistoryRef.current?.updateTaskStatus(taskId, "completed", 100, resultUrl);
+            taskHistoryRef.current?.updateTaskStatus(
+              taskId,
+              "completed",
+              100,
+              resultUrl
+            );
           }
         }
       }
@@ -210,7 +221,8 @@ export default function Home() {
     while (!stoppedRef.current) {
       try {
         const res = await fetch(`${TV_API}/tts/${ttsId}`);
-        if (!res.ok) throw new Error(`tts task fetch failed with status ${res.status}`);
+        if (!res.ok)
+          throw new Error(`tts task fetch failed with status ${res.status}`);
         const data = await res.json();
         // data.status: pending, running, success, failed
         if (data.status === "running") {
@@ -221,16 +233,20 @@ export default function Home() {
             // 同步到历史
             const taskId = currentTaskIdRef.current;
             if (taskId) {
-              taskHistoryRef.current?.updateTaskStatus(taskId, "transcribing", Math.min(100, Math.max(0, data.progress)));
+              taskHistoryRef.current?.updateTaskStatus(
+                taskId,
+                "transcribing",
+                Math.min(100, Math.max(0, data.progress))
+              );
             }
           }
-          
+
           // 当状态为running时，启动SSE连接并停止轮询
           connectSSE(ttsId);
           return; // 停止轮询
         } else if (data.status === "success") {
           if (stoppedRef.current) return; // 避免重复处理
-          
+
           setStatus("completed");
           setPercent(100);
           setOutputName(data.output_name);
@@ -239,12 +255,17 @@ export default function Home() {
           const taskId = currentTaskIdRef.current;
           if (taskId && data.output_name) {
             const resultUrl = `${TV_API}/static/${data.output_name}`;
-            taskHistoryRef.current?.updateTaskStatus(taskId, "completed", 100, resultUrl);
+            taskHistoryRef.current?.updateTaskStatus(
+              taskId,
+              "completed",
+              100,
+              resultUrl
+            );
           }
           return data;
         } else if (data.status === "failed") {
           if (stoppedRef.current) return; // 避免在SSE已处理的情况下重复处理
-          
+
           setStatus("error");
           // 同步到历史
           const taskId = currentTaskIdRef.current;
@@ -255,7 +276,8 @@ export default function Home() {
         }
       } catch (err) {
         console.error("轮询TTS任务失败:", err);
-        if (!stoppedRef.current) { // 仅在任务未被其他方式停止时设置错误
+        if (!stoppedRef.current) {
+          // 仅在任务未被其他方式停止时设置错误
           setStatus("error");
           const taskId = currentTaskIdRef.current;
           if (taskId) {
@@ -308,9 +330,12 @@ export default function Home() {
        * - ttx 样式:    [03:54 → 03:56] text
        * =============================== */
       // 检查 logs 或 content 数组
-      const logLines = Array.isArray(data.logs) ? data.logs : 
-                      Array.isArray(data.content) ? data.content : [];
-                      
+      const logLines = Array.isArray(data.logs)
+        ? data.logs
+        : Array.isArray(data.content)
+        ? data.content
+        : [];
+
       if (logLines.length > 0) {
         const newSegs: TranscriptSegment[] = [];
 
@@ -447,15 +472,18 @@ export default function Home() {
 
     const current = inputRef.current;
     if (!current.type) return;
-    
-  // 获取视频源描述
-  const videoSource = current.type === 'url' ? (current.value as string) : (current.value as File).name;
-  setStatus("queueing");
+
+    // 获取视频源描述
+    const videoSource =
+      current.type === "url"
+        ? (current.value as string)
+        : (current.value as File).name;
+    setStatus("queueing");
 
     if (current.type === "url" && typeof current.value === "string") {
       // 先调用下载服务
       try {
-  setStatus("downloading");
+        setStatus("downloading");
 
         // 提交下载任务（带重试和超时）
         const dvTaskId = await withRetry(async () => {
@@ -472,7 +500,7 @@ export default function Home() {
           return taskId;
         });
 
-  const dvResult = await pollDvTask(dvTaskId);
+        const dvResult = await pollDvTask(dvTaskId);
         // dvResult.fullPath 指向可访问的音频文件
         // 注意：dvResult 返回的路径应为 Next.js 能代理访问的地址或者外部可访问地址。
         const audioUrl =
@@ -480,7 +508,7 @@ export default function Home() {
         if (!audioUrl) throw new Error("download result missing file url");
         console.log("audioUrl result:", dvResult);
         // 创建转写任务（带重试和超时）
-  setStatus("transcoding");
+        setStatus("transcoding");
         const ttsId = await withRetry(async () => {
           const tRes = await fetchWithRetry(`${TV_API}/tts/task`, {
             method: "POST",
@@ -508,7 +536,7 @@ export default function Home() {
 
         // 用真实ID创建历史记录
         if (ttsId) {
-          taskHistoryRef.current?.addTask(videoSource, 'url', ttsId);
+          taskHistoryRef.current?.addTask(videoSource, "url", ttsId);
           currentTaskIdRef.current = ttsId;
           taskHistoryRef.current?.updateTaskStatus(ttsId, "transcribing", 0);
         }
@@ -516,20 +544,27 @@ export default function Home() {
         // 同时启动SSE和轮询，看哪个先返回结果
         {
           connectSSE(ttsId);
-        
-        // 启动轮询作为备用方案
-        pollTTSTask(ttsId).catch(error => {
-          console.error("轮询TTS任务失败:", error);
-        });
+
+          // 启动轮询作为备用方案
+          pollTTSTask(ttsId).catch((error) => {
+            console.error("轮询TTS任务失败:", error);
+          });
           if (currentTaskIdRef.current) {
-            taskHistoryRef.current?.updateTaskStatus(currentTaskIdRef.current, "transcribing", 0);
+            taskHistoryRef.current?.updateTaskStatus(
+              currentTaskIdRef.current,
+              "transcribing",
+              0
+            );
           }
         }
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
         if (currentTaskIdRef.current) {
-          taskHistoryRef.current?.updateTaskStatus(currentTaskIdRef.current, "error");
+          taskHistoryRef.current?.updateTaskStatus(
+            currentTaskIdRef.current,
+            "error"
+          );
         }
       }
     }
@@ -538,7 +573,7 @@ export default function Home() {
       // 上传文件到 TTS 上传接口
       try {
         // 正在上传音频文件
-  setStatus("uploading");
+        setStatus("uploading");
 
         // 上传文件（带重试，但不设置超时，因为上传可能耗时较长）
         const ttsId = await withRetry(async () => {
@@ -567,7 +602,7 @@ export default function Home() {
         });
 
         if (ttsId) {
-          taskHistoryRef.current?.addTask(videoSource, 'file', ttsId);
+          taskHistoryRef.current?.addTask(videoSource, "file", ttsId);
           currentTaskIdRef.current = ttsId;
           taskHistoryRef.current?.updateTaskStatus(ttsId, "transcribing", 0);
         }
@@ -575,22 +610,29 @@ export default function Home() {
         // 同时启动SSE和轮询，看哪个先返回结果
         if (ttsId) {
           {
-          connectSSE(ttsId);
-          
-          // 启动轮询作为备用方案
-          pollTTSTask(ttsId).catch(error => {
-            console.error("轮询TTS任务失败:", error);
-          });
-        }
+            connectSSE(ttsId);
+
+            // 启动轮询作为备用方案
+            pollTTSTask(ttsId).catch((error) => {
+              console.error("轮询TTS任务失败:", error);
+            });
+          }
           if (currentTaskIdRef.current) {
-            taskHistoryRef.current?.updateTaskStatus(currentTaskIdRef.current, "transcribing", 0);
+            taskHistoryRef.current?.updateTaskStatus(
+              currentTaskIdRef.current,
+              "transcribing",
+              0
+            );
           }
         }
       } catch (err) {
         console.error("任务失败（已重试3次）:", err);
         setStatus("error");
         if (currentTaskIdRef.current) {
-          taskHistoryRef.current?.updateTaskStatus(currentTaskIdRef.current, "error");
+          taskHistoryRef.current?.updateTaskStatus(
+            currentTaskIdRef.current,
+            "error"
+          );
         }
       }
     }
@@ -602,7 +644,7 @@ export default function Home() {
     // 通过 Next.js 代理静态文件，遵循部署架构：浏览器 -> Next.js -> tv
     const url = `${TV_API}/static/${outputName}`;
     window.open(url, "_blank");
-    
+
     // 更新任务历史中的结果链接
     // 这里我们可以尝试找到当前任务并更新结果URL，但这需要追踪当前任务ID
     // 目前的实现中我们没有保持对当前任务ID的引用，所以跳过这一步
@@ -650,11 +692,7 @@ export default function Home() {
             Video To Text
           </span> */}
           <div className="ml-4">
-            <StatusIndicator
-              status={status}
-              queue={queue}
-              percent={percent}
-            />
+            <StatusIndicator status={status} queue={queue} percent={percent} />
           </div>
         </div>
         <div className="flex items-center space-x-4">
@@ -665,12 +703,19 @@ export default function Home() {
               currentTaskIdRef.current = task.id;
 
               try {
-                if (task.sourceType === 'url') {
+                if (task.sourceType === "url") {
                   setStatus("downloading");
-                  taskHistoryRef.current?.updateTaskStatus(task.id, "downloading", 0);
+                  taskHistoryRef.current?.updateTaskStatus(
+                    task.id,
+                    "downloading",
+                    0
+                  );
 
                   const dvTaskId = await withRetry(async () => {
-                    const body = { url: task.videoSource, quality: "audio_low" };
+                    const body = {
+                      url: task.videoSource,
+                      quality: "audio_low",
+                    };
                     const res = await fetchWithRetry(`${DV_API}/download`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -684,30 +729,50 @@ export default function Home() {
                   });
 
                   const dvResult = await pollDvTask(dvTaskId);
-                  const audioUrl = dvResult.fullPath || dvResult.output || dvResult.location;
-                  if (!audioUrl) throw new Error("download result missing file url");
+                  const audioUrl =
+                    dvResult.fullPath || dvResult.output || dvResult.location;
+                  if (!audioUrl)
+                    throw new Error("download result missing file url");
 
                   setStatus("transcoding");
-                  taskHistoryRef.current?.updateTaskStatus(task.id, "transcoding", 0);
+                  taskHistoryRef.current?.updateTaskStatus(
+                    task.id,
+                    "transcoding",
+                    0
+                  );
 
                   const ttsId = await withRetry(async () => {
                     const tRes = await fetchWithRetry(`${TV_API}/tts/task`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ url: audioUrl, quality: "small", languageArray: "auto" }),
+                      body: JSON.stringify({
+                        url: audioUrl,
+                        quality: "small",
+                        languageArray: "auto",
+                      }),
                     });
                     if (!tRes.ok) throw new Error("create tts task failed");
                     let tjson: any = {};
-                    try { tjson = await tRes.json(); } catch {}
-                    const id = tjson.id || tjson.taskId || tRes.headers.get("Location")?.split("/").pop();
+                    try {
+                      tjson = await tRes.json();
+                    } catch {}
+                    const id =
+                      tjson.id ||
+                      tjson.taskId ||
+                      tRes.headers.get("Location")?.split("/").pop();
                     if (!id) throw new Error("tts id not found");
                     return id;
                   });
 
-                  if (ttsId) taskHistoryRef.current?.setTaskTtsId(task.id, ttsId);
+                  if (ttsId)
+                    taskHistoryRef.current?.setTaskTtsId(task.id, ttsId);
                   connectSSE(ttsId);
                   pollTTSTask(ttsId).catch(() => {});
-                  taskHistoryRef.current?.updateTaskStatus(task.id, "transcribing", 0);
+                  taskHistoryRef.current?.updateTaskStatus(
+                    task.id,
+                    "transcribing",
+                    0
+                  );
                 } else {
                   // file 场景无法自动访问本地文件，维持失败或引导用户重新上传
                   taskHistoryRef.current?.updateTaskStatus(task.id, "error");
@@ -780,7 +845,9 @@ export default function Home() {
                   if (!outputName) return;
                   try {
                     const res = await fetch(
-                      `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(outputName)}`
+                      `${TV_API}/tts/srt-to-txt?file=${encodeURIComponent(
+                        outputName
+                      )}`
                     );
                     if (!res.ok) throw new Error("srt to txt failed");
                     const txt = await res.text();

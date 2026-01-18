@@ -20,7 +20,9 @@ const FeedbackButton: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
               {/* 顶部栏 */}
               <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50">
-                <h3 className="text-base font-semibold text-blue-700">意见反馈</h3>
+                <h3 className="text-base font-semibold text-blue-700">
+                  意见反馈
+                </h3>
                 <button
                   className="p-1.5 rounded hover:bg-gray-200 text-gray-600"
                   onClick={() => setOpen(false)}
@@ -32,7 +34,7 @@ const FeedbackButton: React.FC = () => {
               {/* 内容区域 */}
               <div className="p-4">
                 <iframe
-                  src="http://38.38.250.209:3834"
+                  src="https://feedback.itclass.top/"
                   title="用户反馈"
                   className="w-full h-[60vh] md:h-[65vh] rounded-lg border border-gray-200"
                   style={{ background: "#fff" }}
