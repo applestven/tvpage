@@ -9,6 +9,7 @@ import TranscriptStream, {
 } from "../components/TranscriptStream";
 import ResultActions from "../components/ResultActions";
 import TaskHistory, { TaskHistoryHandle, TaskItem } from "../components/TaskHistory";
+import FeedbackButton from "@/components/FeedbackButton";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { fetchWithRetry, withRetry } from "../lib/fetchWithRetry";
 
@@ -717,6 +718,7 @@ export default function Home() {
               }
             }}
           />
+          <FeedbackButton />
         </div>
       </header>
 
