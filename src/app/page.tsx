@@ -696,6 +696,14 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center space-x-4">
+          <a
+            href="http://43.139.236.50:5566/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            线路一
+          </a>
           <TaskHistory
             ref={taskHistoryRef}
             onRetry={async (task: TaskItem) => {
