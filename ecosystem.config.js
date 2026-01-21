@@ -1,14 +1,16 @@
+// ecosystem.config.js
+const path = require('path');
+
 module.exports = {
   apps: [
     {
       name: 'tvpage-nextjs',
 
-      // ⭐ 唯一推荐方式
       script: 'npm',
       args: 'run start:prod',
 
-      // ⭐ 一定是项目根目录
-      cwd: '/root/code/tvpage',
+      // 使用当前 ecosystem.config.js 所在目录
+      cwd: path.resolve(__dirname),
 
       exec_mode: 'fork',
       instances: 1,
@@ -22,9 +24,9 @@ module.exports = {
       max_restarts: 10,
       restart_delay: 3000,
 
-      // ⭐ 用绝对路径，避免歧义
-      out_file: '/root/code/tvpage/logs/out.log',
-      error_file: '/root/code/tvpage/logs/error.log',
+      // 日志也放到项目目录下
+      out_file: path.resolve(__dirname, 'logs/out.log'),
+      error_file: path.resolve(__dirname, 'logs/error.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
   ],
