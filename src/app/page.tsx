@@ -13,6 +13,7 @@ import TaskHistory, {
   TaskItem,
 } from "../components/TaskHistory";
 import FeedbackButton from "@/components/FeedbackButton";
+import ModelSelector, { ModelOption } from "../components/ModelSelector";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { fetchWithRetry, withRetry } from "../lib/fetchWithRetry";
 
@@ -52,6 +53,8 @@ export default function Home() {
   const currentTaskIdRef = useRef<string | null>(null);
   // track success count for closing SSE connection
   const successCountRef = useRef<number>(0);
+
+  const [model, setModel] = useState<ModelOption>("base");
 
   useEffect(() => {
     // 初始化：查询 TTS 队列状态，仅当有排队时展示数量
@@ -408,6 +411,15 @@ export default function Home() {
           // 如果看起来像秒则转换为毫秒（阈值：<= 10000 视为秒）
           durationRef.current =
             raw > 10000 ? Math.round(raw) : Math.round(raw * 1000);
+          // 若选择 small 且超过100分钟，弹窗并中断
+          if (model === "small" && durationRef.current > 100 * 60 * 1000) {
+            alert("暂不支持超过100分钟的视频 ，仅提供测试演示使用");
+            stoppedRef.current = true;
+            setStatus("error");
+            es.close();
+            sseRef.current = null;
+            return;
+          }
           // 尝试用已存在的 segments 更新进度（使用最后一段的 start）
           if (durationRef.current && segmentsRef.current.length > 0) {
             const last = segmentsRef.current[segmentsRef.current.length - 1];
@@ -515,7 +527,7 @@ export default function Home() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               url: audioUrl,
-              quality: "small",
+              quality: model === "small" ? "small" : "base",
               languageArray: "auto",
             }),
           });
@@ -579,7 +591,7 @@ export default function Home() {
         const ttsId = await withRetry(async () => {
           const fm = new FormData();
           fm.append("file", current.value as File);
-          fm.append("quality", "small");
+          fm.append("quality", model === "small" ? "small" : "base");
           fm.append("languageArray", "auto");
           const upl = await fetchWithRetry(`${TV_API}/tts/upload`, {
             method: "POST",
@@ -755,7 +767,7 @@ export default function Home() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         url: audioUrl,
-                        quality: "small",
+                        quality: model === "small" ? "small" : "base",
                         languageArray: "auto",
                       }),
                     });
@@ -812,7 +824,16 @@ export default function Home() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-blue-900 mb-1">
-                2. 语言选择
+                2. 模型选择
+              </h2>
+              {/* <p className="text-xs text-blue-700 mb-2">
+                选择“最佳速度 base”或“最佳质量 small”
+              </p> */}
+              <ModelSelector value={model} onChange={setModel} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-blue-900 mb-1">
+                3. 语言选择
               </h2>
               <p className="text-xs text-blue-700 mb-2">请选择视频语音的语言</p>
               <LanguageSelector />
